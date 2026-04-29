@@ -2,7 +2,12 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="QG Finanças">
+<meta name="mobile-web-app-capable" content="yes">
 <title>QG FINANÇAS</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -442,11 +447,139 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 .filter-label { font-size:0.68rem; color:var(--text3); letter-spacing:2px; text-transform:uppercase; }
 
 /* RESPONSIVE */
-@media(max-width:768px) {
+/* ================== MOBILE / TABLET ================== */
+
+/* Botão hambúrguer — escondido no desktop */
+.menu-btn {
+  display:none; background:none; border:none; color:var(--text); font-size:1.5rem;
+  cursor:pointer; padding:6px 10px; margin-right:6px; line-height:1;
+  -webkit-tap-highlight-color:transparent;
+}
+.menu-btn:active { color:var(--green); }
+
+/* Backdrop (overlay) quando sidebar tá aberta no mobile */
+.sidebar-backdrop {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+  z-index:998; backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+  opacity:0; transition:opacity .25s;
+}
+.sidebar-backdrop.open { display:block; opacity:1; }
+
+/* Tablet — sidebar mais estreita */
+@media (max-width:1024px) {
   :root { --sidebar-w:220px; }
-  .content-area { padding:16px; }
-  .topbar { padding:12px 16px; }
-  .stat-grid { grid-template-columns:repeat(2,1fr); }
+  .content-area { padding:18px; }
+}
+
+/* MOBILE — abaixo de 760px */
+@media (max-width:760px) {
+  html, body { font-size:14.5px; }
+  body { -webkit-text-size-adjust:100%; }
+
+  /* Safe area insets (iPhone notch / home indicator) */
+  #app { padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+
+  /* Sidebar off-canvas */
+  #sidebar {
+    position:fixed; top:0; left:0; bottom:0; width:280px; max-width:84vw;
+    transform:translateX(-100%); transition:transform .28s ease;
+    z-index:999; box-shadow:0 0 30px rgba(0,0,0,0.6);
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  #sidebar.open { transform:translateX(0); }
+
+  /* Sidebar nav items maiores (touch-friendly 44px+) */
+  .nav-item { padding:14px 18px; font-size:0.95rem; }
+  .nav-group-label { padding:14px 18px 6px; }
+  .sidebar-header { padding:18px 18px 14px; padding-top:calc(18px + env(safe-area-inset-top)); }
+  .gear-btn { padding:6px 0; font-size:0.95rem; }
+  .gear-icon { font-size:1.4rem; }
+
+  /* Mostra hambúrguer */
+  .menu-btn { display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:40px; }
+
+  /* Topbar com safe area top */
+  .topbar {
+    padding:12px 14px; padding-top:calc(12px + env(safe-area-inset-top));
+    position:sticky; top:0; z-index:50; background:var(--bg);
+  }
+  .page-title { font-size:1rem; letter-spacing:1.5px; flex:1; }
+  .topbar-actions { gap:6px; }
+  .notif-btn { min-width:40px; min-height:40px; display:flex; align-items:center; justify-content:center; }
+
+  /* Content area */
+  .content-area { padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
+
+  /* Cards e grids */
+  .card { padding:14px; }
+  .stat-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
+  .stat-grid > * { padding:14px; }
+
+  /* Forms 1 coluna */
+  .form-row { grid-template-columns:1fr; gap:12px; }
+  .form-control, input.form-control, select.form-control, textarea.form-control {
+    font-size:16px;  /* evita zoom no iOS */
+    padding:12px 14px;
+    min-height:44px;
+  }
+
+  /* Botões touch-friendly */
+  .btn { min-height:44px; padding:10px 18px; font-size:0.92rem; }
+  .btn-sm { min-height:38px; padding:8px 14px; font-size:0.82rem; }
+
+  /* Tabelas — wrap em container scrollável */
+  .content-area table {
+    display:block; overflow-x:auto; white-space:nowrap;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:thin;
+  }
+  .content-area table::-webkit-scrollbar { height:6px; }
+  .content-area table::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  table th, table td { padding:10px 12px; font-size:0.85rem; }
+
+  /* Modais ocupam quase tela toda */
+  .modal-overlay { padding:0; align-items:flex-end; }
+  .modal {
+    max-width:100%; width:100%; max-height:92vh;
+    border-radius:14px 14px 0 0; padding:18px 16px;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom));
+  }
+  .modal-wide { max-width:100%; }
+  .modal-header { margin-bottom:14px; }
+  .modal-title { font-size:1rem; }
+  .modal-close { min-width:40px; min-height:40px; font-size:1.3rem; }
+
+  /* Login card — confortável no mobile */
+  .login-card { padding:24px 20px; max-width:96%; }
+  .login-tab { padding:14px 6px; font-size:0.78rem; }
+  .login-input { font-size:16px; padding:14px; min-height:48px; }
+  .login-btn { padding:15px; min-height:50px; }
+
+  /* Startup logo menor */
+  .startup-logo { font-size:1.9rem; letter-spacing:3px; }
+  .startup-logo span { font-size:0.78rem; letter-spacing:5px; }
+
+  /* Notif panel full-width */
+  #notif-panel { width:100% !important; max-width:100% !important; right:0; }
+
+  /* Remove tap-highlight padrão (azul/cinza) em elementos clicáveis */
+  button, .nav-item, .btn, .menu-btn, .modal-close, a, [onclick] {
+    -webkit-tap-highlight-color:rgba(0,230,118,0.15);
+  }
+}
+
+/* MOBILE PEQUENO — iPhone SE / Galaxy A pequeno (≤ 380px) */
+@media (max-width:380px) {
+  .stat-grid { grid-template-columns:1fr; }
+  .page-title { font-size:0.9rem; }
+  .login-card { padding:20px 16px; }
+  .startup-logo { font-size:1.6rem; letter-spacing:2px; }
+}
+
+/* Modo paisagem em mobile baixinho — evita modal cobrir tela toda */
+@media (max-width:760px) and (max-height:500px) and (orientation:landscape) {
+  .modal { max-height:96vh; border-radius:14px; }
+  .modal-overlay { align-items:center; padding:8px; }
 }
 </style>
 </head>
@@ -534,6 +667,7 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
   <!-- MAIN -->
   <div id="main">
     <div class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()" aria-label="Abrir menu">☰</button>
       <div class="page-title" id="pageTitle">DASHBOARD</div>
       <div class="topbar-actions">
         <span style="font-size:0.75rem;color:var(--text3)" id="lastSaved"></span>
@@ -542,6 +676,9 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
     </div>
     <div class="content-area" id="contentArea"></div>
   </div>
+
+  <!-- Backdrop pra fechar sidebar no mobile -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 </div>
 
 <!-- NOTIFICATION PANEL -->
@@ -941,7 +1078,29 @@ function navigate(page) {
   ca.innerHTML = '';
   const renderers = { dashboard: renderDashboard, extrato: renderExtrato, entradas: renderEntradas, gastos: renderGastos, cofrinhos: renderCofrinhos, cartoes: renderCartoes, custos: renderCustos, investimentos: renderInvestimentos, pendencias: renderPendencias, relatorio: renderRelatorio, notificacoes: renderNotificacoes, receber: renderReceber, clientes: renderClientes, feedback: renderFeedback, settings: renderSettings, evolucao: renderEvolucao };
   if (renderers[page]) renderers[page]();
+  closeSidebar();
+  window.scrollTo(0, 0);
 }
+
+// ============================================================
+// SIDEBAR (mobile off-canvas)
+// ============================================================
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebarBackdrop');
+  const isOpen = sb.classList.toggle('open');
+  bd.classList.toggle('open', isOpen);
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebarBackdrop')?.classList.remove('open');
+}
+
+// Fecha sidebar quando aperta ESC
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSidebar();
+});
 
 function destroyCharts() {
   Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} });
