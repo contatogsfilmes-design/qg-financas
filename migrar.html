@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Migrar dados — QG Finanças</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  body { font-family:'Rajdhani',sans-serif; background:#0f1117; color:#e8f5e9; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card { background:#161b24; border:1px solid rgba(0,230,118,0.2); border-radius:12px; padding:32px; max-width:520px; width:100%; box-shadow:0 4px 24px rgba(0,0,0,0.5); }
+  h1 { font-family:'Orbitron',monospace; color:#00e676; font-size:1.4rem; margin:0 0 8px; letter-spacing:2px; }
+  .sub { color:#90a4ae; font-size:0.9rem; margin-bottom:24px; }
+  .step { padding:14px; background:#1e2535; border-radius:8px; margin-bottom:12px; font-size:0.92rem; }
+  .step b { color:#00e676; }
+  button { padding:14px 24px; background:#00e676; color:#0f1117; border:none; border-radius:8px; font-family:'Orbitron',monospace; font-size:0.85rem; letter-spacing:1.5px; cursor:pointer; text-transform:uppercase; width:100%; margin-bottom:8px; }
+  button:hover { box-shadow:0 0 20px #00e676; }
+  button:disabled { opacity:0.4; cursor:wait; }
+  button.secondary { background:transparent; color:#90a4ae; border:1px solid #90a4ae; }
+  input[type=file] { display:none; }
+  .label-file { display:block; padding:14px; background:#1e2535; border:2px dashed rgba(0,230,118,0.3); border-radius:8px; text-align:center; cursor:pointer; margin-bottom:12px; transition:all .2s; }
+  .label-file:hover { border-color:#00e676; }
+  .status { padding:12px; border-radius:8px; margin-top:14px; font-size:0.88rem; display:none; }
+  .status.ok { background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.4); color:#00e676; display:block; }
+  .status.err { background:rgba(255,82,82,0.1); border:1px solid rgba(255,82,82,0.4); color:#ff5252; display:block; }
+  .status.info { background:rgba(64,196,255,0.1); border:1px solid rgba(64,196,255,0.4); color:#40c4ff; display:block; }
+  .userline { font-size:0.82rem; color:#90a4ae; margin-bottom:14px; padding:8px 12px; background:#1e2535; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>MIGRAR DADOS</h1>
+  <div class="sub">Sobe seu <code>qg_financas_dados.json</code> atual para a nuvem (Firebase). Esse processo é único — depois disso o app online já tem seus dados.</div>
+
+  <div id="loginBox">
+    <div class="step"><b>Passo 1.</b> Faça login com a mesma conta que vc vai usar no app.</div>
+    <button onclick="loginGoogle()">🔵 Entrar com Google</button>
+    <button class="secondary" onclick="document.getElementById('emailBox').style.display='block'">Usar e-mail/senha</button>
+    <div id="emailBox" style="display:none;margin-top:12px">
+      <input id="email" placeholder="seu@email.com" style="width:100%;padding:10px;background:#1e2535;border:1px solid #00e676;border-radius:6px;color:#e8f5e9;margin-bottom:8px">
+      <input id="pwd" type="password" placeholder="senha" style="width:100%;padding:10px;background:#1e2535;border:1px solid #00e676;border-radius:6px;color:#e8f5e9;margin-bottom:8px">
+      <button onclick="loginEmail()">Entrar</button>
+    </div>
+  </div>
+
+  <div id="uploadBox" style="display:none">
+    <div class="userline">Logado como: <span id="userLabel"></span></div>
+    <div class="step"><b>Passo 2.</b> Selecione seu arquivo <code>qg_financas_dados.json</code></div>
+    <label class="label-file" for="fileInput">📁 Escolher arquivo JSON</label>
+    <input type="file" id="fileInput" accept=".json,application/json">
+    <div id="filePreview" style="display:none;margin-bottom:12px;padding:10px;background:#1e2535;border-radius:6px;font-size:0.85rem"></div>
+    <button id="uploadBtn" onclick="doUpload()" disabled>☁️ Enviar para a nuvem</button>
+    <button class="secondary" onclick="logout()">Sair</button>
+  </div>
+
+  <div id="status" class="status"></div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD0W9fUbu0BbQr0tvuRHG3xirFZHsZrzos",
+  authDomain: "qgfinancas42.firebaseapp.com",
+  projectId: "qgfinancas42",
+  storageBucket: "qgfinancas42.firebasestorage.app",
+  messagingSenderId: "826816471055",
+  appId: "1:826816471055:web:b75b470a1152ca34b2837a"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const fdb = firebase.firestore();
+
+let parsedData = null;
+
+function setStatus(msg, type='info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+async function loginGoogle() {
+  try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch(e) { setStatus('Erro: ' + e.message, 'err'); }
+}
+
+async function loginEmail() {
+  const email = document.getElementById('email').value.trim();
+  const pwd = document.getElementById('pwd').value;
+  try { await auth.signInWithEmailAndPassword(email, pwd); }
+  catch(e) {
+    if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+      if (confirm('Conta não existe. Criar conta com este email/senha?')) {
+        try { await auth.createUserWithEmailAndPassword(email, pwd); }
+        catch(e2) { setStatus('Erro: ' + e2.message, 'err'); }
+      }
+    } else setStatus('Erro: ' + e.message, 'err');
+  }
+}
+
+async function logout() {
+  await auth.signOut();
+  parsedData = null;
+  document.getElementById('uploadBtn').disabled = true;
+  document.getElementById('filePreview').style.display = 'none';
+}
+
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    parsedData = JSON.parse(text);
+    const counts = [];
+    for (const k of ['gastos','custos_mensais','investimentos','pendencias','bancos_saldo','clientes','entradas_caixa','cofrinhos']) {
+      if (Array.isArray(parsedData[k])) counts.push(`${parsedData[k].length} ${k.replace('_',' ')}`);
+    }
+    document.getElementById('filePreview').style.display = 'block';
+    document.getElementById('filePreview').innerHTML = '<b>Arquivo:</b> ' + file.name + '<br><b>Conteúdo:</b><br>' + counts.join('<br>');
+    document.getElementById('uploadBtn').disabled = false;
+    setStatus('Arquivo carregado. Clique em "Enviar".', 'info');
+  } catch(err) {
+    setStatus('Arquivo inválido: ' + err.message, 'err');
+  }
+});
+
+async function doUpload() {
+  if (!parsedData || !auth.currentUser) return;
+  if (!confirm('Vai SUBSTITUIR todos os dados na nuvem desta conta pelos do arquivo. Continuar?')) return;
+  document.getElementById('uploadBtn').disabled = true;
+  setStatus('Enviando...', 'info');
+  try {
+    const ref = fdb.collection('users').doc(auth.currentUser.uid).collection('app').doc('data');
+    await ref.set(parsedData);
+    setStatus('✅ Sucesso! Seus dados estão na nuvem. Pode fechar esta página e abrir o index.html.', 'ok');
+  } catch(e) {
+    setStatus('Erro: ' + e.message, 'err');
+    document.getElementById('uploadBtn').disabled = false;
+  }
+}
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('loginBox').style.display = 'none';
+    document.getElementById('uploadBox').style.display = 'block';
+    document.getElementById('userLabel').textContent = user.email || user.displayName || user.uid;
+  } else {
+    document.getElementById('loginBox').style.display = 'block';
+    document.getElementById('uploadBox').style.display = 'none';
+  }
+});
+</script>
+
+</body>
+</html>
