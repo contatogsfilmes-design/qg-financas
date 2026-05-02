@@ -733,6 +733,8 @@ let charts = {};
 let currentUser = null;
 let saveTimeout = null;
 let isLoadingFromCloud = false;
+let gastosFilterStart = null;
+let gastosFilterEnd = null;
 
 // ============================================================
 // FIREBASE INIT
@@ -1382,7 +1384,22 @@ function renderDashboard() {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="card">
-        <div class="card-title">📊 GASTOS POR CATEGORIA — MÊS</div>
+        <div class="card-title">📊 GASTOS POR CATEGORIA</div>
+        <div style="background:var(--bg2);padding:12px;border-radius:var(--radius2);margin-bottom:12px;border:1px solid var(--border2)">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+            <div style="flex:1;min-width:120px">
+              <label style="display:block;font-size:0.7rem;color:var(--text3);letter-spacing:1px;margin-bottom:3px">De:</label>
+              <input type="date" id="gastosDateStart" onchange="updateGastosFilter()" style="width:100%;padding:6px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--radius2);font-family:var(--font-body);font-size:0.85rem">
+            </div>
+            <div style="flex:1;min-width:120px">
+              <label style="display:block;font-size:0.7rem;color:var(--text3);letter-spacing:1px;margin-bottom:3px">Até:</label>
+              <input type="date" id="gastosDateEnd" onchange="updateGastosFilter()" style="width:100%;padding:6px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--radius2);font-family:var(--font-body);font-size:0.85rem">
+            </div>
+            <button onclick="resetGastosFilter()" style="padding:6px 12px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius2);cursor:pointer;font-size:0.75rem;white-space:nowrap">↺</button>
+          </div>
+          <div style="font-size:0.65rem;color:var(--text3);margin-bottom:6px">Meses:</div>
+          <div id="gastosMonthSelector" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+        </div>
         <div class="chart-wrap"><canvas id="chartGastos"></canvas></div>
       </div>
       <div class="card">
@@ -1403,6 +1420,7 @@ function renderDashboard() {
   `;
 
   setTimeout(() => {
+    initGastosFilter();
     renderGastosChart();
     renderBancosChart();
   }, 100);
@@ -1882,15 +1900,21 @@ function clearExtratoFilters() {
 function renderGastosChart() {
   const ctx = document.getElementById('chartGastos');
   if (!ctx) return;
-  const thisMonth = new Date().toISOString().substring(0, 7);
+  let dateStart = gastosFilterStart || new Date().toISOString().substring(0, 7) + '-01';
+  let dateEnd = gastosFilterEnd || new Date().toISOString();
   const byTag = {};
-  db.gastos.filter(g => g.data && g.data.startsWith(thisMonth)).forEach(g => {
+  db.gastos.filter(g => {
+    if (!g.data) return false;
+    return g.data >= dateStart && g.data <= dateEnd;
+  }).forEach(g => {
     const tag = g.tag || 'Outros';
     byTag[tag] = (byTag[tag] || 0) + parseFloat(g.valor || 0);
   });
   const labels = Object.keys(byTag);
   const values = Object.values(byTag);
-  if (labels.length === 0) { ctx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-text">Sem gastos este mês</div></div>'; return; }
+  const startDisplay = dateStart.substring(0, 10);
+  const endDisplay = dateEnd.substring(0, 10);
+  if (labels.length === 0) { ctx.parentElement.innerHTML = `<div class="empty-state"><div class="empty-text">Sem gastos no período ${startDisplay} até ${endDisplay}</div></div>`; return; }
   charts.gastos = new Chart(ctx, {
     type: 'doughnut',
     data: { labels, datasets: [{ data: values, backgroundColor: ['#00e676','#40c4ff','#ff9800','#ff5252','#e040fb','#ffeb3b','#00bcd4','#8bc34a'], borderWidth: 0 }] },
@@ -1915,6 +1939,70 @@ function renderBancosChart() {
       }
     }
   });
+}
+
+function initGastosFilter() {
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  document.getElementById('gastosDateStart').value = monthStart.toISOString().substring(0, 10);
+  document.getElementById('gastosDateEnd').value = monthEnd.toISOString().substring(0, 10);
+  gastosFilterStart = monthStart.toISOString().substring(0, 10);
+  gastosFilterEnd = monthEnd.toISOString().substring(0, 10);
+  renderMonthCheckboxes();
+}
+
+function renderMonthCheckboxes() {
+  const selector = document.getElementById('gastosMonthSelector');
+  if (!selector) return;
+  selector.innerHTML = '';
+  const today = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const yearMonth = d.toISOString().substring(0, 7);
+    const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+    months.push({ yearMonth, label });
+  }
+  months.forEach(m => {
+    const btn = document.createElement('button');
+    btn.innerHTML = m.label;
+    btn.style.cssText = `padding:4px 10px;font-size:0.75rem;border-radius:var(--radius2);border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .2s;white-space:nowrap`;
+    btn.dataset.month = m.yearMonth;
+    btn.onclick = (e) => {
+      e.preventDefault();
+      selectMonthRange(m.yearMonth);
+    };
+    selector.appendChild(btn);
+  });
+}
+
+function selectMonthRange(monthStr) {
+  const [year, month] = monthStr.split('-');
+  const start = new Date(parseInt(year), parseInt(month) - 1, 1);
+  const end = new Date(parseInt(year), parseInt(month), 0);
+  document.getElementById('gastosDateStart').value = start.toISOString().substring(0, 10);
+  document.getElementById('gastosDateEnd').value = end.toISOString().substring(0, 10);
+  updateGastosFilter();
+}
+
+function updateGastosFilter() {
+  const startEl = document.getElementById('gastosDateStart');
+  const endEl = document.getElementById('gastosDateEnd');
+  if (startEl && endEl) {
+    gastosFilterStart = startEl.value;
+    gastosFilterEnd = endEl.value;
+    if (charts.gastos) charts.gastos.destroy();
+    renderGastosChart();
+  }
+}
+
+function resetGastosFilter() {
+  gastosFilterStart = null;
+  gastosFilterEnd = null;
+  initGastosFilter();
+  if (charts.gastos) charts.gastos.destroy();
+  renderGastosChart();
 }
 
 // ============================================================
