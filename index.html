@@ -98,7 +98,8 @@
   --shadow: 0 2px 16px rgba(0,0,0,0.07);
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-html,body { height:100%; font-family:var(--font-body); background:var(--bg); color:var(--text); font-size:15px; }
+html { width:100%; overflow-x:hidden; }
+body { height:100%; width:100%; overflow-x:hidden; font-family:var(--font-body); background:var(--bg); color:var(--text); font-size:15px; }
 
 /* STARTUP SCREEN */
 #startup {
@@ -170,7 +171,7 @@ html,body { height:100%; font-family:var(--font-body); background:var(--bg); col
 .login-error.show { display:block; }
 
 /* LAYOUT */
-#app { display:none; height:100vh; flex-direction:row; }
+#app { display:none; height:100vh; width:100%; flex-direction:row; overflow:hidden; }
 #app.visible { display:flex; }
 
 /* SIDEBAR */
@@ -217,7 +218,9 @@ html,body { height:100%; font-family:var(--font-body); background:var(--bg); col
 .topbar-actions { display:flex; gap:12px; align-items:center; }
 .notif-btn { position:relative; background:none; border:none; color:var(--text2); font-size:1.3rem; cursor:pointer; }
 .notif-dot { position:absolute; top:2px; right:2px; width:8px; height:8px; background:var(--red); border-radius:50%; }
-.content-area { flex:1; overflow-y:auto; padding:24px 28px; }
+.content-area { flex:1; overflow-y:auto; overflow-x:hidden; padding:24px 28px; width:100%; max-width:100%; }
+.content-area > * { max-width:100%; overflow-x:hidden; }
+.content-area canvas { max-width:100%; width:auto !important; height:auto !important; }
 
 /* CARDS */
 .card {
@@ -508,7 +511,10 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
   .notif-btn { min-width:40px; min-height:40px; display:flex; align-items:center; justify-content:center; }
 
   /* Content area */
-  .content-area { padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
+  .content-area { padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom)); width:100%; overflow-x:hidden; }
+  .content-area > * { width:100%; max-width:100%; }
+  .content-area table { width:100%; max-width:100%; display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .content-area canvas { max-width:100%; width:auto !important; height:auto !important; }
 
   /* Cards e grids */
   .card { padding:12px; margin-bottom:10px; }
