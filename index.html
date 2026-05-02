@@ -1401,6 +1401,11 @@ function renderDashboard() {
           <div id="gastosMonthSelector" style="display:flex;gap:4px;flex-wrap:wrap"></div>
         </div>
         <div class="chart-wrap"><canvas id="chartGastos"></canvas></div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border2)">
+          <div style="font-size:0.85rem;color:var(--text2);letter-spacing:1px;margin-bottom:12px">💵 ENTRADAS VS GASTOS POR MÊS</div>
+          <div class="chart-wrap"><canvas id="chartFluxoMeses" style="max-height:200px"></canvas></div>
+          <div id="tabelaFluxoMeses" style="margin-top:12px;font-size:0.8rem;overflow-x:auto"></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-title">🏦 SALDO POR BANCO</div>
@@ -1950,6 +1955,8 @@ function initGastosFilter() {
   gastosFilterStart = monthStart.toISOString().substring(0, 10);
   gastosFilterEnd = monthEnd.toISOString().substring(0, 10);
   renderMonthCheckboxes();
+  renderFluxoMesesChart();
+  renderFluxoMesesTabela();
 }
 
 function renderMonthCheckboxes() {
@@ -1993,7 +2000,10 @@ function updateGastosFilter() {
     gastosFilterStart = startEl.value;
     gastosFilterEnd = endEl.value;
     if (charts.gastos) charts.gastos.destroy();
+    if (charts.fluxoMeses) charts.fluxoMeses.destroy();
     renderGastosChart();
+    renderFluxoMesesChart();
+    renderFluxoMesesTabela();
   }
 }
 
@@ -2003,6 +2013,86 @@ function resetGastosFilter() {
   initGastosFilter();
   if (charts.gastos) charts.gastos.destroy();
   renderGastosChart();
+  renderFluxoMesesChart();
+  renderFluxoMesesTabela();
+}
+
+function renderFluxoMesesChart() {
+  const ctx = document.getElementById('chartFluxoMeses');
+  if (!ctx) return;
+  const fluxoPorMes = {};
+  const hoje = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const mesFim = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const mesStr = d.toISOString().substring(0, 7);
+    const mesPrevio = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+    const entradas = db.entradas_caixa.filter(e => e.data && e.data.substring(0, 7) === mesStr).reduce((a, e) => a + parseFloat(e.valor || 0), 0);
+    const gastos = db.gastos.filter(g => g.data && g.data.substring(0, 7) === mesStr).reduce((a, g) => a + parseFloat(g.valor || 0), 0);
+    fluxoPorMes[mesPrevio] = { entradas, gastos, fluxo: entradas - gastos };
+  }
+  const labels = Object.keys(fluxoPorMes);
+  const entradas = labels.map(l => fluxoPorMes[l].entradas);
+  const gastos = labels.map(l => fluxoPorMes[l].gastos);
+  if (charts.fluxoMeses) charts.fluxoMeses.destroy();
+  charts.fluxoMeses = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '↑ Entradas', data: entradas, backgroundColor: '#00e676', borderRadius: 4 },
+        { label: '↓ Gastos', data: gastos, backgroundColor: '#ff5252', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--text') || '#e8f5e9', font: { family: 'Rajdhani', size: 11 } } }
+      },
+      scales: {
+        x: { ticks: { color: '#90a4ae', font: { family: 'Rajdhani', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#90a4ae', font: { family: 'Rajdhani' }, callback: v => 'R$ ' + fmtMoney(v) }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+function renderFluxoMesesTabela() {
+  const el = document.getElementById('tabelaFluxoMeses');
+  if (!el) return;
+  const fluxoPorMes = {};
+  const hoje = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const mesStr = d.toISOString().substring(0, 7);
+    const mesPrevio = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+    const entradas = db.entradas_caixa.filter(e => e.data && e.data.substring(0, 7) === mesStr).reduce((a, e) => a + parseFloat(e.valor || 0), 0);
+    const gastos = db.gastos.filter(g => g.data && g.data.substring(0, 7) === mesStr).reduce((a, g) => a + parseFloat(g.valor || 0), 0);
+    fluxoPorMes[mesPrevio] = { entradas, gastos, fluxo: entradas - gastos };
+  }
+  const rows = Object.entries(fluxoPorMes).map(([mes, dados]) => `
+    <tr style="border-bottom:1px solid var(--border2);padding:8px 0">
+      <td style="padding:8px 4px;color:var(--text2)">${mes}</td>
+      <td style="padding:8px 4px;text-align:right;color:#00e676">+ R$ ${fmtMoney(dados.entradas)}</td>
+      <td style="padding:8px 4px;text-align:right;color:#ff5252">− R$ ${fmtMoney(dados.gastos)}</td>
+      <td style="padding:8px 4px;text-align:right;color:${dados.fluxo >= 0 ? '#00e676' : '#ff5252'};font-weight:bold">${dados.fluxo >= 0 ? '📈' : '📉'} R$ ${fmtMoney(Math.abs(dados.fluxo))}</td>
+    </tr>
+  `).join('');
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);padding:8px 0">
+          <th style="padding:8px 4px;text-align:left;color:var(--text3);font-weight:600">MÊS</th>
+          <th style="padding:8px 4px;text-align:right;color:var(--text3);font-weight:600">ENTRADAS</th>
+          <th style="padding:8px 4px;text-align:right;color:var(--text3);font-weight:600">GASTOS</th>
+          <th style="padding:8px 4px;text-align:right;color:var(--text3);font-weight:600">FLUXO</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
 }
 
 // ============================================================
