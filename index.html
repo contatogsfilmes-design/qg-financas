@@ -511,9 +511,35 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
   .content-area { padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
 
   /* Cards e grids */
-  .card { padding:14px; }
-  .stat-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
-  .stat-grid > * { padding:14px; }
+  .card { padding:12px; margin-bottom:10px; }
+  .stat-grid { grid-template-columns:repeat(2,1fr); gap:8px; }
+  .stat-grid > * { padding:10px; }
+
+  /* Dashboard — responsivo 1 coluna em mobile */
+  .content-area > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns:1fr !important; gap:10px !important; }
+  .content-area > div[style*="grid-template-columns:1fr 1fr"] .card:first-child { margin-bottom:0; }
+
+  /* Gráficos mais compactos */
+  .chart-wrap { padding:12px; margin-bottom:10px; max-height:220px; }
+  .chart-wrap canvas { max-height:180px; }
+
+  /* Filtro compacto */
+  .card-title { font-size:0.9rem; margin-bottom:8px; padding:0; }
+  input[type="date"] { font-size:14px; padding:6px 8px; }
+  #gastosMonthSelector { gap:3px; }
+  #gastosMonthSelector button { padding:4px 8px; font-size:0.7rem; }
+
+  /* Tabela mobile scrollável e compacta */
+  #tabelaFluxoMeses table { font-size:0.75rem; }
+  #tabelaFluxoMeses table th, #tabelaFluxoMeses table td { padding:6px 4px; }
+  #tabelaFluxoMeses { font-size:0.75rem; max-height:160px; overflow-y:auto; }
+
+  /* Hero section mais compacto */
+  .content-area > div[style*="linear-gradient"] { padding:14px 16px; margin-bottom:8px; }
+  .content-area > div[style*="linear-gradient"] > div { gap:12px; }
+
+  /* Carousel de bancos mais apertado */
+  .content-area > div[style*="overflow-x:auto"] { margin-bottom:10px; gap:6px; padding-bottom:2px; }
 
   /* Forms 1 coluna */
   .form-row { grid-template-columns:1fr; gap:12px; }
@@ -570,10 +596,20 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 
 /* MOBILE PEQUENO — iPhone SE / Galaxy A pequeno (≤ 380px) */
 @media (max-width:380px) {
-  .stat-grid { grid-template-columns:1fr; }
+  .stat-grid { grid-template-columns:1fr; gap:6px; }
   .page-title { font-size:0.9rem; }
   .login-card { padding:20px 16px; }
   .startup-logo { font-size:1.6rem; letter-spacing:2px; }
+
+  /* Dashboard super compacto */
+  .card { padding:10px; margin-bottom:8px; }
+  .chart-wrap { padding:10px; margin-bottom:8px; max-height:160px; }
+  .chart-wrap canvas { max-height:140px; }
+  input[type="date"] { font-size:13px; padding:5px 6px; min-width:100px; }
+  #gastosMonthSelector button { padding:3px 6px; font-size:0.65rem; }
+  #tabelaFluxoMeses table { font-size:0.7rem; }
+  #tabelaFluxoMeses table th, #tabelaFluxoMeses table td { padding:5px 3px; }
+  .card-title { font-size:0.85rem; }
 }
 
 /* Modo paisagem em mobile baixinho — evita modal cobrir tela toda */
