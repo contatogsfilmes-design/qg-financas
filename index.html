@@ -6126,7 +6126,8 @@ async function sendJuliusMessage() {
     // PASSO 1: se houver imagem, analisa ela separado (payload pequeno, sem system prompt)
     if (imageDataUrl) {
       _juliusTypingStop();
-      _juliusAppend('julius', '🔍 Analisando comprovante...');
+      const _kbImg = Math.round(imageDataUrl.length * 0.75 / 1024);
+      _juliusAppend('julius', `🔍 Analisando comprovante (~${_kbImg}KB)...`);
       _juliusTypingStart();
 
       try {
@@ -6281,7 +6282,7 @@ function _analyzeReceiptImage(apiKey, imageDataUrl) {
     console.log(`[Julius] Imagem: ~${kbSize}KB (base64 chars: ${imageDataUrl.length})`);
 
     const body = JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      model: 'llama-3.2-11b-vision-preview',
       messages: [{
         role: 'user',
         content: [
@@ -6346,9 +6347,11 @@ function _callGroq(apiKey, history) {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText);
-          resolve(data.choices[0].message.content);
+          const content = data.choices?.[0]?.message?.content;
+          if (!content) throw new Error(`choices vazio — ${xhr.responseText.substring(0,120)}`);
+          resolve(content);
         } catch(e) {
-          reject(new Error('Resposta inválida da API'));
+          reject(new Error(e.message || 'Resposta inválida da API'));
         }
       } else {
         let msg = `HTTP ${xhr.status}`;
@@ -6449,9 +6452,9 @@ function openJuliusFromNav() {
   if (!juliusOpen) toggleJulius();
 }
 
-// ── Compressão de imagem — reduz pra max 350px JPEG 0.55 (leve pra mobile) ─────
+// ── Compressão de imagem — reduz pra max 150px JPEG 0.35 (ultra-leve pra mobile) ─────
 function _compressImage(dataUrl, maxPx, quality) {
-  maxPx = maxPx || 350; quality = quality || 0.55;
+  maxPx = maxPx || 150; quality = quality || 0.35;
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
