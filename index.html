@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="QG Finanças">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
 <title>QG FINANÇAS</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -740,6 +741,63 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
   #julius-panel { width:calc(100vw - 16px); right:8px; bottom:90px; height:480px; }
   #julius-fab { bottom:16px; right:16px; }
 }
+
+/* Julius — nav item especial */
+.julius-nav-label { color:var(--green) !important; opacity:0.9; }
+.julius-nav-item { color:var(--green) !important; font-weight:600; }
+.julius-nav-item:hover { background:var(--green-glow) !important; border-left-color:var(--green) !important; }
+.julius-nav-badge {
+  background:var(--green); color:#0f1117;
+  font-size:0.52rem; padding:2px 6px;
+  border-radius:8px; margin-left:5px; font-weight:900; letter-spacing:0.5px;
+  vertical-align:middle;
+}
+
+/* Julius — botões de ação (anexar / mic) */
+.julius-action-btn {
+  width:34px; height:34px; border-radius:8px;
+  background:var(--bg4); border:1px solid var(--border);
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  font-size:0.92rem; flex-shrink:0; transition:all 0.2s; color:var(--text2);
+  padding:0;
+}
+.julius-action-btn:hover { background:var(--bg3); color:var(--text); border-color:var(--green); }
+.julius-action-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.julius-action-btn.recording {
+  background:rgba(255,82,82,0.15); border-color:#ff5252; color:#ff5252;
+  animation:juliusMicPulse 1s ease-in-out infinite;
+}
+@keyframes juliusMicPulse {
+  0%,100% { box-shadow:0 0 0 0 rgba(255,82,82,0.4); }
+  50%      { box-shadow:0 0 0 7px rgba(255,82,82,0); }
+}
+
+/* Julius — preview do comprovante */
+#julius-preview {
+  padding:6px 12px 0; display:none; flex-shrink:0;
+}
+.julius-preview-img {
+  position:relative; display:inline-block;
+}
+.julius-preview-img img {
+  max-height:64px; max-width:90px; border-radius:8px;
+  border:1px solid var(--border); object-fit:cover; display:block;
+}
+.julius-preview-remove {
+  position:absolute; top:-7px; right:-7px;
+  width:18px; height:18px; border-radius:50%;
+  background:#ff5252; border:none; cursor:pointer;
+  color:#fff; font-size:0.6rem; display:flex;
+  align-items:center; justify-content:center; font-weight:900;
+  line-height:1;
+}
+
+/* Julius — thumbnail de imagem dentro da bolha do chat */
+.julius-chat-img {
+  max-width:160px; max-height:120px; border-radius:8px;
+  border:1px solid var(--border); display:block; margin-bottom:4px;
+  object-fit:cover;
+}
 </style>
 </head>
 <body>
@@ -812,6 +870,10 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
       <div class="nav-item" onclick="navigate('notificacoes')" data-page="notificacoes"><span class="ni">🔔</span> Notificações <span class="nav-badge" id="badge-notif" style="display:none">0</span></div>
       <div class="nav-group-label">Pessoal</div>
       <div class="nav-item" onclick="navigate('evolucao')" data-page="evolucao"><span class="ni">🌱</span> Evolução Pessoal</div>
+      <div class="nav-group-label julius-nav-label">IA</div>
+      <div class="nav-item julius-nav-item" onclick="openJuliusFromNav()">
+        <span class="ni">💰</span> Julius <span class="julius-nav-badge">IA</span>
+      </div>
       <div class="nav-group-label">Sistema</div>
       <div class="nav-item" onclick="navigate('feedback')" data-page="feedback"><span class="ni">💬</span> Feedbacks</div>
       <div class="nav-item" onclick="navigate('settings')" data-page="settings"><span class="ni">⚙️</span> Configurações</div>
@@ -1165,7 +1227,23 @@ function startApp() {
   updateUserProfile();
   navigate('dashboard');
   updateBadges();
+  // Verificar se há comprovante compartilhado via PWA share target
+  _checkPendingShare();
 }
+
+// Registrar Service Worker para PWA share target
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(e => console.warn('[QG SW]', e));
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.type === 'julius-share') {
+        juliusHandleSharedFile(event.data.dataUrl, event.data.name);
+      }
+    });
+  });
+}
+// placeholder pra evitar ReferenceError antes do Julius carregar
+function juliusHandleSharedFile(d, n) { console.warn('Julius ainda carregando', d, n); }
 
 auth.onAuthStateChanged(async (user) => {
   if (user) {
@@ -5933,6 +6011,10 @@ function confirmarFreelance(clienteId) {
 let juliusOpen = false;
 let juliusHistory = [];
 let juliusSending = false;
+let juliusAttachedImage = null;   // { dataUrl, name }
+let juliusMediaRecorder = null;
+let juliusAudioChunks = [];
+let juliusRecording = false;
 
 function toggleJulius() {
   juliusOpen = !juliusOpen;
@@ -6014,18 +6096,32 @@ async function sendJuliusMessage() {
     return;
   }
 
+  // Captura imagem antes de limpar
+  const imageDataUrl = juliusAttachedImage?.dataUrl || null;
+  const imageName    = juliusAttachedImage?.name || '';
+  juliusRemoveAttachment();
+
   juliusSending = true;
   if (sendBtn) sendBtn.disabled = true;
   input.value = '';
   input.style.height = 'auto';
 
-  _juliusAppend('user', text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'));
-  juliusHistory.push({ role: 'user', content: text });
+  // Monta mensagem do usuário (com thumbnail se houver imagem)
+  const safeText = text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const userHtml = imageDataUrl
+    ? `<img src="${imageDataUrl}" class="julius-chat-img" alt="comprovante"><span style="font-size:0.72rem;color:var(--text3);display:block;margin-bottom:4px">📎 ${imageName}</span>${safeText}`
+    : safeText;
+  _juliusAppend('user', userHtml);
+
+  const historyContent = imageDataUrl
+    ? [{ type:'image_url', image_url:{ url: imageDataUrl } }, { type:'text', text }]
+    : text;
+  juliusHistory.push({ role: 'user', content: historyContent });
 
   _juliusTypingStart();
 
   try {
-    const raw = await _callGroq(key, juliusHistory);
+    const raw = await _callGroq(key, juliusHistory, imageDataUrl);
     _juliusTypingStop();
     const { message, actions } = _parseJuliusResponse(raw);
     if (actions.length > 0) _executeJuliusActions(actions);
@@ -6151,22 +6247,40 @@ TIPOS DE AÇÃO DISPONÍVEIS:
 Para forma_raw: use o id do banco para débito/pix, "cred_" + id do banco para crédito, "dinheiro" para dinheiro físico.`;
 }
 
-async function _callGroq(apiKey, history) {
+async function _callGroq(apiKey, history, imageDataUrl = null) {
+  const hasImage = !!imageDataUrl;
+  const model = hasImage
+    ? 'meta-llama/llama-4-scout-17b-16e-instruct'
+    : 'llama-3.3-70b-versatile';
+
+  // Monta histórico — substitui a última mensagem do usuário com o formato multimodal se houver imagem
+  const histSlice = history.slice(-12);
+  const messages = [
+    { role: 'system', content: _buildJuliusContext() },
+    ...histSlice
+  ];
+
+  // Se tiver imagem e a última msg do usuário ainda for texto simples (não foi convertida), converte aqui
+  if (hasImage) {
+    const lastIdx = messages.map(m => m.role).lastIndexOf('user');
+    if (lastIdx >= 0 && typeof messages[lastIdx].content === 'string') {
+      messages[lastIdx] = {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageDataUrl } },
+          { type: 'text', text: messages[lastIdx].content }
+        ]
+      };
+    }
+  }
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: _buildJuliusContext() },
-        ...history.slice(-12)
-      ],
-      temperature: 0.72,
-      max_tokens: 1200
-    })
+    body: JSON.stringify({ model, messages, temperature: 0.72, max_tokens: 1200 })
   });
 
   if (!res.ok) {
@@ -6259,6 +6373,180 @@ function _executeJuliusActions(actions) {
   }
 }
 
+// ── Abrir Julius pelo menu lateral ──────────────────────────
+function openJuliusFromNav() {
+  closeSidebar();
+  if (!juliusOpen) toggleJulius();
+}
+
+// ── Anexar comprovante (imagem) ──────────────────────────────
+function juliusAttachClick() {
+  document.getElementById('julius-file-input')?.click();
+}
+
+function juliusFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    juliusAttachedImage = { dataUrl: e.target.result, name: file.name };
+    _juliusShowPreview(e.target.result, file.name);
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function _juliusShowPreview(dataUrl, name) {
+  const wrap = document.getElementById('julius-preview');
+  if (!wrap) return;
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="julius-preview-img">
+      <img src="${dataUrl}" alt="${name || 'comprovante'}">
+      <button class="julius-preview-remove" onclick="juliusRemoveAttachment()" title="Remover">✕</button>
+    </div>
+    <div style="font-size:0.68rem;color:var(--text3);margin-top:3px">📎 ${name || 'imagem'}</div>
+  `;
+}
+
+function juliusRemoveAttachment() {
+  juliusAttachedImage = null;
+  const wrap = document.getElementById('julius-preview');
+  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+}
+
+// ── Gravação de áudio com transcrição via Groq Whisper ───────
+async function juliusToggleMic() {
+  const btn = document.getElementById('julius-mic');
+  if (!btn) return;
+
+  if (juliusRecording) {
+    juliusMediaRecorder?.stop();
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert('Gravação de áudio não suportada neste navegador.');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    juliusAudioChunks = [];
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                   : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                   : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                   : '';
+
+    juliusMediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+
+    juliusMediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) juliusAudioChunks.push(e.data);
+    };
+
+    juliusMediaRecorder.onstop = async () => {
+      juliusRecording = false;
+      btn.classList.remove('recording');
+      btn.textContent = '🎤';
+      btn.title = 'Gravar áudio';
+      stream.getTracks().forEach(t => t.stop());
+
+      const blob = new Blob(juliusAudioChunks, { type: mimeType || 'audio/webm' });
+      if (blob.size < 500) return;
+
+      const key = db.settings.groq_api_key;
+      if (!key) {
+        _juliusAppend('julius', '⚙️ Precisa da chave Groq pra transcrever o áudio! Configure em Configurações.');
+        return;
+      }
+
+      btn.textContent = '⏳';
+      btn.disabled = true;
+      try {
+        const text = await _transcribeAudio(key, blob, mimeType);
+        if (text?.trim()) {
+          const input = document.getElementById('julius-input');
+          if (input) {
+            input.value = text.trim();
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+            input.focus();
+          }
+        }
+      } catch(e) {
+        _juliusAppend('julius', `❌ Erro na transcrição do áudio: <em>${e.message}</em>`);
+      } finally {
+        btn.textContent = '🎤';
+        btn.disabled = false;
+      }
+    };
+
+    juliusMediaRecorder.start();
+    juliusRecording = true;
+    btn.classList.add('recording');
+    btn.textContent = '⏹️';
+    btn.title = 'Parar gravação';
+
+  } catch(e) {
+    if (e.name === 'NotAllowedError') {
+      alert('Permissão de microfone negada. Autorize nas configurações do navegador e tente de novo.');
+    } else {
+      alert('Erro ao acessar microfone: ' + e.message);
+    }
+  }
+}
+
+async function _transcribeAudio(apiKey, blob, mimeType) {
+  const ext = (mimeType || '').includes('mp4') ? 'm4a' : 'webm';
+  const formData = new FormData();
+  formData.append('file', blob, `audio.${ext}`);
+  formData.append('model', 'whisper-large-v3-turbo');
+  formData.append('language', 'pt');
+  formData.append('response_format', 'text');
+
+  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+    body: formData
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.text();
+}
+
+// ── Share Target: arquivo enviado via "Compartilhar" do celular ──
+function juliusHandleSharedFile(dataUrl, name) {
+  if (!dataUrl) return;
+  juliusAttachedImage = { dataUrl, name: name || 'comprovante.jpg' };
+  _juliusShowPreview(dataUrl, name);
+  if (!juliusOpen) toggleJulius();
+  setTimeout(() => {
+    const input = document.getElementById('julius-input');
+    if (input && !input.value.trim()) {
+      input.value = 'Analisa esse comprovante pra mim.';
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+    }
+  }, 400);
+}
+
+async function _checkPendingShare() {
+  try {
+    const cache = await caches.open('julius-share-v1');
+    const res = await cache.match('/__pending_share__');
+    if (!res) return;
+    const data = await res.json();
+    await cache.delete('/__pending_share__');
+    if (data?.dataUrl && (Date.now() - (data.timestamp || 0)) < 300000) {
+      juliusHandleSharedFile(data.dataUrl, data.name);
+    }
+  } catch(e) {}
+}
+
 function saveGroqKey() {
   const key = document.getElementById('groqApiKey')?.value.trim();
   if (!key) { alert('Cole sua chave API do Groq antes de salvar.'); return; }
@@ -6290,10 +6578,14 @@ function juliusKeydown(e) {
     <button class="julius-header-close" onclick="toggleJulius()" title="Fechar">✕</button>
   </div>
   <div id="julius-messages"></div>
+  <div id="julius-preview"></div>
   <div class="julius-input-wrap">
+    <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Anexar comprovante">📎</button>
+    <input type="file" id="julius-file-input" accept="image/*" style="display:none" onchange="juliusFileSelected(event)">
+    <button class="julius-action-btn" id="julius-mic" onclick="juliusToggleMic()" title="Gravar áudio">🎤</button>
     <textarea
       id="julius-input"
-      placeholder="Fala o que você gastou hoje..."
+      placeholder="Fala o que você gastou..."
       rows="1"
       onkeydown="juliusKeydown(event)"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
