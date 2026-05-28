@@ -623,6 +623,123 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
   .modal { max-height:96vh; border-radius:14px; }
   .modal-overlay { align-items:center; padding:8px; }
 }
+
+/* ============================================================
+   JULIUS — CONSULTOR FINANCEIRO PESSOAL
+   ============================================================ */
+#julius-fab {
+  position:fixed; bottom:24px; right:24px; width:62px; height:62px;
+  border-radius:50%; background:linear-gradient(135deg,var(--green),var(--green2));
+  border:none; cursor:pointer;
+  box-shadow:0 4px 24px rgba(0,230,118,0.45);
+  z-index:1000; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  font-family:var(--font-head); color:#0f1117;
+}
+#julius-fab:hover { transform:scale(1.12); box-shadow:0 6px 32px rgba(0,230,118,0.7); }
+#julius-fab.open { background:linear-gradient(135deg,#ff5252,#e53935); box-shadow:0 4px 24px rgba(255,82,82,0.5); }
+.julius-fab-icon { font-size:1.4rem; line-height:1; }
+.julius-fab-name { font-size:0.48rem; letter-spacing:1.5px; margin-top:2px; font-weight:900; }
+
+#julius-panel {
+  position:fixed; bottom:100px; right:24px; width:370px; height:530px;
+  background:var(--bg2); border:1px solid var(--border); border-radius:18px;
+  box-shadow:0 12px 50px rgba(0,0,0,0.55);
+  z-index:999; display:flex; flex-direction:column; overflow:hidden;
+  transform:translateY(24px) scale(0.94); opacity:0; pointer-events:none;
+  transition:all 0.28s cubic-bezier(0.34,1.56,0.64,1);
+}
+#julius-panel.open { transform:translateY(0) scale(1); opacity:1; pointer-events:all; }
+
+.julius-header {
+  background:linear-gradient(90deg,var(--bg3),var(--bg4));
+  border-bottom:1px solid var(--border);
+  padding:11px 14px; display:flex; align-items:center; gap:10px; flex-shrink:0;
+}
+.julius-header-avatar {
+  width:38px; height:38px; border-radius:50%;
+  background:linear-gradient(135deg,var(--green),var(--green2));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-size:0.72rem; color:#0f1117;
+  font-weight:900; flex-shrink:0;
+}
+.julius-header-name { font-family:var(--font-head); font-size:0.82rem; color:var(--green); letter-spacing:1px; }
+.julius-header-sub { font-size:0.66rem; color:var(--text3); margin-top:2px; }
+.julius-header-close {
+  margin-left:auto; color:var(--text3); background:none; border:none;
+  cursor:pointer; font-size:1.1rem; padding:4px 6px; border-radius:6px;
+  transition:all 0.2s;
+}
+.julius-header-close:hover { color:var(--text); background:var(--bg4); }
+
+#julius-messages {
+  flex:1; overflow-y:auto; padding:14px 12px;
+  display:flex; flex-direction:column; gap:10px;
+  scrollbar-width:thin; scrollbar-color:var(--border) transparent;
+}
+.julius-msg { display:flex; align-items:flex-end; gap:8px; max-width:92%; }
+.julius-msg-julius { align-self:flex-start; }
+.julius-msg-user { align-self:flex-end; flex-direction:row-reverse; }
+.julius-avatar {
+  width:28px; height:28px; border-radius:50%;
+  background:linear-gradient(135deg,var(--green),var(--green2));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head); font-size:0.58rem; color:#0f1117;
+  font-weight:900; flex-shrink:0;
+}
+.julius-bubble {
+  padding:9px 13px; border-radius:14px;
+  font-size:0.81rem; line-height:1.55;
+  max-width:calc(100% - 36px); word-break:break-word;
+}
+.julius-msg-julius .julius-bubble {
+  background:var(--bg3); border:1px solid var(--border2);
+  color:var(--text); border-bottom-left-radius:4px;
+}
+.julius-msg-user .julius-bubble {
+  background:var(--green3); color:var(--text);
+  border:1px solid var(--border); border-bottom-right-radius:4px;
+}
+.julius-typing span {
+  display:inline-block; width:6px; height:6px; border-radius:50%;
+  background:var(--text3); margin:0 2px;
+  animation:juliusBounce 1.2s infinite;
+}
+.julius-typing span:nth-child(2) { animation-delay:0.2s; }
+.julius-typing span:nth-child(3) { animation-delay:0.4s; }
+@keyframes juliusBounce {
+  0%,60%,100% { transform:translateY(0); }
+  30% { transform:translateY(-6px); }
+}
+.julius-input-wrap {
+  border-top:1px solid var(--border); padding:10px 12px;
+  display:flex; gap:8px; align-items:flex-end;
+  background:var(--bg2); flex-shrink:0;
+}
+#julius-input {
+  flex:1; background:var(--bg3); border:1px solid var(--border);
+  border-radius:10px; color:var(--text); font-family:var(--font-body);
+  font-size:0.84rem; padding:8px 12px; resize:none;
+  min-height:38px; max-height:100px; overflow-y:auto;
+  outline:none; transition:border-color 0.2s; line-height:1.4;
+}
+#julius-input:focus { border-color:var(--green); }
+#julius-input::placeholder { color:var(--text3); }
+#julius-send {
+  width:38px; height:38px; border-radius:10px;
+  background:var(--green); border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  color:#0f1117; font-size:1rem; flex-shrink:0; transition:all 0.2s;
+  font-weight:900;
+}
+#julius-send:hover { background:var(--green2); transform:scale(1.06); }
+#julius-send:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+@media (max-width:500px) {
+  #julius-panel { width:calc(100vw - 16px); right:8px; bottom:90px; height:480px; }
+  #julius-fab { bottom:16px; right:16px; }
+}
 </style>
 </head>
 <body>
@@ -752,7 +869,8 @@ let db = {
     tags_gastos: ['Uber','Comida na rua','Despesas da casa','Gasolina','Gasto aleatório','Passagens'],
     tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
     tags_clientes: ['GS FILMES','Biel do QG'],
-    bancos: ['Banco Inter','Nubank','Santander']
+    bancos: ['Banco Inter','Nubank','Santander'],
+    groq_api_key: ''
   },
   gastos: [],
   custos_mensais: [],
@@ -805,7 +923,8 @@ function getDefaultDB() {
       tags_gastos: ['Uber','Comida na rua','Despesas da casa','Gasolina','Gasto aleatório','Passagens'],
       tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
       tags_clientes: ['GS FILMES','Biel do QG'],
-      bancos: []
+      bancos: [],
+      groq_api_key: ''
     },
     gastos: [], custos_mensais: [], investimentos: [], pendencias: [],
     bancos_saldo: [], cartao_compras: [], clientes: [], recebimentos: [], feedbacks: [],
@@ -4828,6 +4947,27 @@ function renderSettings() {
           </div>
         </div>
 
+        <!-- JULIUS IA -->
+        <div class="card">
+          <div class="card-title">🤖 IA JULIUS (GROQ)</div>
+          <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px">
+            O <strong style="color:var(--green)">Julius</strong> é seu consultor financeiro pessoal com IA. Registra gastos por conversa, questiona se vale a pena gastar e monitora seu saldo.<br>
+            <span style="font-size:0.72rem;color:var(--text3);margin-top:4px;display:block">A chave Groq é <strong>gratuita</strong> — crie em <strong>console.groq.com</strong></span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chave API Groq</label>
+            <input type="password" class="form-control" id="groqApiKey"
+              value="${db.settings.groq_api_key || ''}"
+              placeholder="gsk_...cole sua chave aqui">
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+            <button class="btn btn-primary btn-sm" onclick="saveGroqKey()">💾 Salvar Chave</button>
+            ${db.settings.groq_api_key
+              ? '<span style="color:var(--green);font-size:0.78rem">✅ Julius ativo</span>'
+              : '<span style="color:var(--text3);font-size:0.78rem">⚠️ Chave não configurada</span>'}
+          </div>
+        </div>
+
         <!-- SOBRE -->
         <div class="card">
           <div class="card-title">ℹ️ SOBRE</div>
@@ -5785,6 +5925,381 @@ function confirmarFreelance(clienteId) {
 }
 
 // (init final removido — auth.onAuthStateChanged controla o fluxo)
+
+// ============================================================
+// JULIUS — CONSULTOR FINANCEIRO PESSOAL
+// ============================================================
+
+let juliusOpen = false;
+let juliusHistory = [];
+let juliusSending = false;
+
+function toggleJulius() {
+  juliusOpen = !juliusOpen;
+  const panel = document.getElementById('julius-panel');
+  const fab = document.getElementById('julius-fab');
+  if (juliusOpen) {
+    panel.classList.add('open');
+    fab.classList.add('open');
+    if (juliusHistory.length === 0) _juliusWelcome();
+    setTimeout(() => document.getElementById('julius-input')?.focus(), 280);
+  } else {
+    panel.classList.remove('open');
+    fab.classList.remove('open');
+  }
+}
+
+function _juliusWelcome() {
+  const key = db.settings.groq_api_key;
+  if (!key) {
+    _juliusAppend('julius',
+      `Oi! Sou o <strong>Julius</strong>, seu consultor financeiro pessoal. 💰<br><br>` +
+      `Antes de começar, preciso da sua chave da API Groq — é de graça, eu juro!<br><br>` +
+      `👉 Vai em <strong>Configurações → IA Julius (Groq)</strong>, cola sua chave e volta aqui. ` +
+      `Aí eu coloco a mão na massa nas suas finanças.`
+    );
+    return;
+  }
+  const nome = (db.settings.username || 'chefe').split(' ')[0];
+  const saldo = calcTotalCaixa();
+  let msg = `E aí, ${nome}! Pode falar o que você gastou hoje, o que recebeu, o que ainda vai pagar... ` +
+    `Fala naturalmente que eu registro tudo. 😎`;
+  if (saldo < 1000) {
+    msg += `<br><br>⚠️ <strong>Já vou avisando:</strong> você tá com <strong>R$ ${fmtMoney(saldo)}</strong> no caixa. ` +
+      `Se não tomar cuidado, vai andar apertado!`;
+  }
+  _juliusAppend('julius', msg);
+}
+
+function _juliusAppend(role, html) {
+  const box = document.getElementById('julius-messages');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.className = `julius-msg julius-msg-${role}`;
+  if (role === 'julius') {
+    div.innerHTML = `<div class="julius-avatar">JU</div><div class="julius-bubble">${html}</div>`;
+  } else {
+    div.innerHTML = `<div class="julius-bubble">${html}</div>`;
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function _juliusTypingStart() {
+  const box = document.getElementById('julius-messages');
+  if (!box || document.getElementById('julius-typing')) return;
+  const div = document.createElement('div');
+  div.id = 'julius-typing';
+  div.className = 'julius-msg julius-msg-julius';
+  div.innerHTML = `<div class="julius-avatar">JU</div><div class="julius-bubble"><span class="julius-typing"><span></span><span></span><span></span></span></div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function _juliusTypingStop() {
+  document.getElementById('julius-typing')?.remove();
+}
+
+async function sendJuliusMessage() {
+  if (juliusSending) return;
+  const input = document.getElementById('julius-input');
+  const sendBtn = document.getElementById('julius-send');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  const key = db.settings.groq_api_key;
+  if (!key) {
+    _juliusAppend('julius', '⚙️ Configura sua chave Groq primeiro! Vai em Configurações → IA Julius (Groq).');
+    return;
+  }
+
+  juliusSending = true;
+  if (sendBtn) sendBtn.disabled = true;
+  input.value = '';
+  input.style.height = 'auto';
+
+  _juliusAppend('user', text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'));
+  juliusHistory.push({ role: 'user', content: text });
+
+  _juliusTypingStart();
+
+  try {
+    const raw = await _callGroq(key, juliusHistory);
+    _juliusTypingStop();
+    const { message, actions } = _parseJuliusResponse(raw);
+    if (actions.length > 0) _executeJuliusActions(actions);
+    _juliusAppend('julius', message);
+    juliusHistory.push({ role: 'assistant', content: raw });
+    if (juliusHistory.length > 20) juliusHistory = juliusHistory.slice(-16);
+  } catch(e) {
+    _juliusTypingStop();
+    _juliusAppend('julius', `❌ Erro ao chamar Groq: <em>${e.message}</em><br>Verifica se a chave está correta em Configurações.`);
+  } finally {
+    juliusSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function _buildJuliusContext() {
+  const todayISO = new Date().toISOString().substring(0,10);
+  const mesAtual = new Date().toISOString().substring(0,7);
+  const todayStr = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  const saldo    = calcTotalCaixa();
+
+  const bancosStr = db.bancos_saldo.length
+    ? db.bancos_saldo.map(b =>
+        `  - [id:${b.id}] ${b.nome} (${b.tipo}): R$ ${fmtMoney(b.saldo)}` +
+        (b.tipo === 'credito' ? ` | limite: R$ ${fmtMoney(b.limite||0)} | venc.fatura: dia ${b.vencimento_fatura||'?'}` : '') +
+        (b.dono ? ` | dono: ${b.dono}` : '')
+      ).join('\n')
+    : '  (nenhum banco cadastrado)';
+
+  const gastosHoje = db.gastos.filter(g => g.data === todayISO);
+  const gastosHojeStr = gastosHoje.length
+    ? gastosHoje.map(g => `  - ${g.descricao}: R$ ${fmtMoney(g.valor)} via ${g.nome_banco}`).join('\n')
+    : '  (nenhum gasto hoje)';
+
+  const gastosMes = db.gastos.filter(g => g.data?.startsWith(mesAtual) && !g.emprestado);
+  const totalMes  = gastosMes.reduce((a,g) => a + parseFloat(g.valor||0), 0);
+
+  const ultimosStr = [...db.gastos]
+    .sort((a,b) => ((b.data||'')+(b.hora||'00:00')).localeCompare((a.data||'')+(a.hora||'00:00')))
+    .slice(0,5)
+    .map(g => `  - [${g.data}] ${g.descricao}: R$ ${fmtMoney(g.valor)} (${g.nome_banco})`)
+    .join('\n') || '  (nenhum)';
+
+  const custosStr = db.custos_mensais.length
+    ? db.custos_mensais.map(c => `  - ${c.nome}: R$ ${fmtMoney(c.valor)}, vence dia ${c.dia_vencimento} (${c.pago?'PAGO':'PENDENTE'})`).join('\n')
+    : '  (nenhum)';
+
+  const alertaSaldo = saldo < 1000
+    ? '\n⚠️ ALERTA CRÍTICO: Saldo total abaixo de R$ 1.000! Modo Julius-preocupado ativado.'
+    : '';
+
+  const bancosJSON = JSON.stringify(
+    db.bancos_saldo.map(b => ({ id: b.id, nome: b.nome, tipo: b.tipo })),
+    null, 2
+  );
+
+  return `Você é Julius, o consultor financeiro pessoal do usuário no app QG Finanças. Sua personalidade é inspirada no Julius do seriado "Todo Mundo Odeia o Chris" — frugal, prático, direto, com humor seco, mas genuinamente preocupado com o bem-estar financeiro do usuário. Você é o pai financeiro que ninguém pediu mas todo mundo precisa.
+
+HOJE: ${todayStr}${alertaSaldo}
+
+━━ SITUAÇÃO ATUAL ━━
+Saldo total em caixa: R$ ${fmtMoney(saldo)}
+Dinheiro físico: R$ ${fmtMoney(db.dinheiro_fisico||0)}
+
+CONTAS E BANCOS:
+${bancosStr}
+
+GASTOS HOJE:
+${gastosHojeStr}
+
+TOTAL GASTO EM ${mesAtual}: R$ ${fmtMoney(totalMes)}
+
+ÚLTIMOS 5 GASTOS:
+${ultimosStr}
+
+CUSTOS MENSAIS FIXOS:
+${custosStr}
+
+━━ REGRAS DE COMPORTAMENTO ━━
+1. Quando saldo < R$ 1.000: avise com urgência, tom de preocupação real ("olha, você tá no limite...")
+2. Questione gastos supérfluos: Uber, delivery, compras por impulso — pergunte se era necessário
+3. Quando o usuário descrever múltiplos gastos: registre todos de uma vez no bloco de ações
+4. Se faltar informação crítica (banco não encontrado, valor não claro): pergunte antes de registrar
+5. Para gastos fixos mensais (carnê, assinatura, mensalidade): use add_custo_mensal
+6. Seja informal: use "cara", "olha", "rapaz", "meu filho" naturalmente
+7. Confirme o que foi registrado no final da mensagem, listando item a item
+8. Responda SEMPRE em português brasileiro
+
+━━ BANCOS DISPONÍVEIS (use os IDs exatos nas ações) ━━
+${bancosJSON}
+
+━━ FORMATO DE AÇÕES ━━
+Quando precisar registrar dados, inclua ao FINAL da mensagem um bloco entre <<<AÇÕES>>> e <<<FIM>>>. Este bloco NÃO aparece para o usuário.
+
+<<<AÇÕES>>>
+[
+  {
+    "tipo": "add_gasto",
+    "dados": {
+      "valor": 10.99,
+      "descricao": "Uber",
+      "forma_raw": "ID_DO_BANCO (débito/pix) ou 'cred_'+ID (crédito) ou 'dinheiro'",
+      "data": "${todayISO}",
+      "tag": "Uber"
+    }
+  },
+  {
+    "tipo": "add_custo_mensal",
+    "dados": {
+      "nome": "Carnê Magalu",
+      "valor": 350.00,
+      "dia_vencimento": 20
+    }
+  }
+]
+<<<FIM>>>
+
+TIPOS DE AÇÃO DISPONÍVEIS:
+- add_gasto: { valor, descricao, forma_raw, data, tag? }
+- add_custo_mensal: { nome, valor, dia_vencimento }
+
+Para forma_raw: use o id do banco para débito/pix, "cred_" + id do banco para crédito, "dinheiro" para dinheiro físico.`;
+}
+
+async function _callGroq(apiKey, history) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: _buildJuliusContext() },
+        ...history.slice(-12)
+      ],
+      temperature: 0.72,
+      max_tokens: 1200
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function _parseJuliusResponse(raw) {
+  let actions = [];
+  let message = raw;
+
+  const match = raw.match(/<<<AÇÕES>>>([\s\S]*?)<<<FIM>>>/i);
+  if (match) {
+    try { actions = JSON.parse(match[1].trim()); } catch(e) { console.warn('Julius parse error:', e); }
+    message = raw.replace(/<<<AÇÕES>>>[\s\S]*?<<<FIM>>>/gi, '').trim();
+  }
+
+  message = message
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+
+  return { message, actions };
+}
+
+function _executeJuliusActions(actions) {
+  let changed = false;
+  const todayISO = new Date().toISOString().substring(0,10);
+  const hora = new Date().toTimeString().substring(0,5);
+
+  for (const action of actions) {
+    try {
+      if (action.tipo === 'add_gasto') {
+        const { valor, descricao, forma_raw, data, tag } = action.dados || {};
+        if (!valor || !descricao || !forma_raw) continue;
+
+        let forma = 'dinheiro', banco_id = null, nome_banco = '💵 Dinheiro';
+        if (forma_raw === 'dinheiro') {
+          forma = 'dinheiro';
+        } else if (forma_raw.startsWith('cred_')) {
+          forma = 'credito';
+          banco_id = forma_raw.slice(5);
+          const b = db.bancos_saldo.find(b => b.id === banco_id);
+          if (!b) continue;
+          nome_banco = b.nome;
+        } else {
+          forma = 'debito';
+          banco_id = forma_raw;
+          const b = db.bancos_saldo.find(b => b.id === banco_id);
+          if (!b) continue;
+          nome_banco = b.nome;
+        }
+
+        _debitarConta(forma_raw, banco_id, parseFloat(valor));
+
+        db.gastos.push({
+          id: uid(), data: data || todayISO, hora,
+          valor: parseFloat(valor), descricao, tag: tag || '',
+          forma, banco_id, nome_banco, forma_raw,
+          emprestado: false, pend_id: null, motivo_emprestimo: ''
+        });
+        changed = true;
+
+      } else if (action.tipo === 'add_custo_mensal') {
+        const { nome, valor, dia_vencimento } = action.dados || {};
+        if (!nome || !valor || !dia_vencimento) continue;
+        db.custos_mensais.push({
+          id: uid(), nome, valor: parseFloat(valor),
+          dia_vencimento: parseInt(dia_vencimento), pago: false
+        });
+        changed = true;
+      }
+    } catch(e) {
+      console.warn('Julius action error:', action, e);
+    }
+  }
+
+  if (changed) {
+    saveData();
+    updateBadges();
+    if (currentPage === 'dashboard') renderDashboard();
+    else if (currentPage === 'gastos') renderGastosTable();
+    else if (currentPage === 'custos') renderCustos();
+  }
+}
+
+function saveGroqKey() {
+  const key = document.getElementById('groqApiKey')?.value.trim();
+  if (!key) { alert('Cole sua chave API do Groq antes de salvar.'); return; }
+  db.settings.groq_api_key = key;
+  saveData();
+  renderSettings();
+  alert('✅ Chave Julius (Groq) salva! Agora abra o Julius e converse com suas finanças.');
+}
+
+function juliusKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendJuliusMessage(); }
+}
 </script>
+
+<!-- JULIUS — BOTÃO FLUTUANTE -->
+<button id="julius-fab" onclick="toggleJulius()" title="Julius — Consultor Financeiro Pessoal">
+  <div class="julius-fab-icon">💰</div>
+  <div class="julius-fab-name">JULIUS</div>
+</button>
+
+<!-- JULIUS — PAINEL DE CHAT -->
+<div id="julius-panel">
+  <div class="julius-header">
+    <div class="julius-header-avatar">JU</div>
+    <div>
+      <div class="julius-header-name">JULIUS</div>
+      <div class="julius-header-sub">Consultor Financeiro Pessoal</div>
+    </div>
+    <button class="julius-header-close" onclick="toggleJulius()" title="Fechar">✕</button>
+  </div>
+  <div id="julius-messages"></div>
+  <div class="julius-input-wrap">
+    <textarea
+      id="julius-input"
+      placeholder="Fala o que você gastou hoje..."
+      rows="1"
+      onkeydown="juliusKeydown(event)"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
+    ></textarea>
+    <button id="julius-send" onclick="sendJuliusMessage()" title="Enviar">➤</button>
+  </div>
+</div>
 </body>
 </html>
