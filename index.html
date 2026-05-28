@@ -6277,8 +6277,11 @@ Para forma_raw: use o id do banco para débito/pix, "cred_" + id do banco para c
 // ── Passo 1: analisa só a imagem (payload pequeno, sem system prompt) ──
 function _analyzeReceiptImage(apiKey, imageDataUrl) {
   return new Promise((resolve, reject) => {
+    const kbSize = Math.round(imageDataUrl.length * 0.75 / 1024);
+    console.log(`[Julius] Imagem: ~${kbSize}KB (base64 chars: ${imageDataUrl.length})`);
+
     const body = JSON.stringify({
-      model: 'llama-3.2-11b-vision-preview',
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
       messages: [{
         role: 'user',
         content: [
@@ -6290,13 +6293,16 @@ function _analyzeReceiptImage(apiKey, imageDataUrl) {
       max_tokens: 250
     });
 
+    console.log(`[Julius] Body da análise: ~${Math.round(body.length/1024)}KB`);
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'https://api.groq.com/openai/v1/chat/completions', true);
     xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.timeout = 30000;
+    xhr.timeout = 40000;
 
     xhr.onload = () => {
+      console.log(`[Julius] Vision status: ${xhr.status}`);
       if (xhr.status >= 200 && xhr.status < 300) {
         try { resolve(JSON.parse(xhr.responseText).choices[0].message.content); }
         catch(e) { reject(new Error('Resposta inválida')); }
@@ -6306,8 +6312,11 @@ function _analyzeReceiptImage(apiKey, imageDataUrl) {
         reject(new Error(msg));
       }
     };
-    xhr.onerror   = () => reject(new Error('Falha de rede'));
-    xhr.ontimeout = () => reject(new Error('Timeout na análise da imagem'));
+    xhr.onerror   = () => {
+      console.log(`[Julius] onerror — status:${xhr.status} state:${xhr.readyState}`);
+      reject(new Error(`Falha de rede (status:${xhr.status})`));
+    };
+    xhr.ontimeout = () => reject(new Error('Timeout (40s) — tente em Wi-Fi'));
     xhr.send(body);
   });
 }
@@ -6440,9 +6449,9 @@ function openJuliusFromNav() {
   if (!juliusOpen) toggleJulius();
 }
 
-// ── Compressão de imagem — reduz pra max 700px JPEG 0.78 ─────
+// ── Compressão de imagem — reduz pra max 350px JPEG 0.55 (leve pra mobile) ─────
 function _compressImage(dataUrl, maxPx, quality) {
-  maxPx = maxPx || 700; quality = quality || 0.78;
+  maxPx = maxPx || 350; quality = quality || 0.55;
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
