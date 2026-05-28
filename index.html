@@ -6252,20 +6252,18 @@ TIPOS DE AÇÃO DISPONÍVEIS:
 Para forma_raw: use o id do banco para débito/pix, "cred_" + id do banco para crédito, "dinheiro" para dinheiro físico.`;
 }
 
-async function _callGroq(apiKey, history, imageDataUrl = null) {
+function _callGroq(apiKey, history, imageDataUrl) {
   const hasImage = !!imageDataUrl;
   const model = hasImage
     ? 'meta-llama/llama-4-scout-17b-16e-instruct'
     : 'llama-3.3-70b-versatile';
 
-  // Monta histórico — substitui a última mensagem do usuário com o formato multimodal se houver imagem
   const histSlice = history.slice(-12);
   const messages = [
     { role: 'system', content: _buildJuliusContext() },
     ...histSlice
   ];
 
-  // Se tiver imagem e a última msg do usuário ainda for texto simples (não foi convertida), converte aqui
   if (hasImage) {
     const lastIdx = messages.map(m => m.role).lastIndexOf('user');
     if (lastIdx >= 0 && typeof messages[lastIdx].content === 'string') {
@@ -6279,22 +6277,34 @@ async function _callGroq(apiKey, history, imageDataUrl = null) {
     }
   }
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ model, messages, temperature: 0.72, max_tokens: 1200 })
+  const body = JSON.stringify({ model, messages, temperature: 0.72, max_tokens: 1200 });
+
+  // XHR — mais estável que fetch para payloads grandes (imagens base64) em mobile
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://api.groq.com/openai/v1/chat/completions', true);
+    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = 60000;
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data.choices[0].message.content);
+        } catch(e) {
+          reject(new Error('Resposta inválida da API'));
+        }
+      } else {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = JSON.parse(xhr.responseText)?.error?.message || msg; } catch(e) {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror   = () => reject(new Error('Falha de rede. Verifique sua conexão.'));
+    xhr.ontimeout = () => reject(new Error('Timeout. Tente com imagem menor ou em Wi-Fi.'));
+    xhr.send(body);
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  return data.choices[0].message.content;
 }
 
 function _parseJuliusResponse(raw) {
@@ -6384,23 +6394,45 @@ function openJuliusFromNav() {
   if (!juliusOpen) toggleJulius();
 }
 
+// ── Compressão de imagem — reduz pra max 700px JPEG 0.78 ─────
+function _compressImage(dataUrl, maxPx, quality) {
+  maxPx = maxPx || 700; quality = quality || 0.78;
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl); // fallback: usa original
+    img.src = dataUrl;
+  });
+}
+
 // ── Anexar comprovante (imagem) ──────────────────────────────
 function juliusAttachClick() {
   document.getElementById('julius-file-input')?.click();
 }
 
-function juliusFileSelected(event) {
+async function juliusFileSelected(event) {
   const file = event.target.files[0];
   event.target.value = '';
   if (!file) return;
   if (!file.type.startsWith('image/')) {
-    _juliusAppend('julius', '📎 Selecione apenas <strong>imagens</strong> (foto do comprovante). Áudios usam o 🎤.');
+    _juliusAppend('julius', '📎 Selecione apenas <strong>imagens</strong> (foto do comprovante).');
     return;
   }
   const reader = new FileReader();
-  reader.onload = e => {
-    juliusAttachedImage = { dataUrl: e.target.result, name: file.name };
-    _juliusShowPreview(e.target.result, file.name);
+  reader.onload = async e => {
+    const compressed = await _compressImage(e.target.result);
+    juliusAttachedImage = { dataUrl: compressed, name: file.name };
+    _juliusShowPreview(compressed, file.name);
   };
   reader.readAsDataURL(file);
 }
@@ -6545,10 +6577,11 @@ function _transcribeAudio(apiKey, blob, mimeType) {
 }
 
 // ── Share Target: arquivo enviado via "Compartilhar" do celular ──
-function juliusHandleSharedFile(dataUrl, name) {
+async function juliusHandleSharedFile(dataUrl, name) {
   if (!dataUrl) return;
-  juliusAttachedImage = { dataUrl, name: name || 'comprovante.jpg' };
-  _juliusShowPreview(dataUrl, name);
+  const compressed = await _compressImage(dataUrl);
+  juliusAttachedImage = { dataUrl: compressed, name: name || 'comprovante.jpg' };
+  _juliusShowPreview(compressed, name);
   if (!juliusOpen) toggleJulius();
   setTimeout(() => {
     const input = document.getElementById('julius-input');
@@ -6609,7 +6642,6 @@ function juliusKeydown(e) {
   <div id="julius-preview"></div>
   <div class="julius-input-wrap">
     <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Foto do comprovante">📎</button>
-    <button class="julius-action-btn julius-mic-btn" id="julius-mic" onclick="juliusToggleMic()" title="Gravar áudio">🎤</button>
     <textarea
       id="julius-input"
       placeholder="Fala o que você gastou..."
