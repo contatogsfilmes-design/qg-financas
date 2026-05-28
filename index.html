@@ -6386,14 +6386,18 @@ function juliusAttachClick() {
 
 function juliusFileSelected(event) {
   const file = event.target.files[0];
+  event.target.value = '';
   if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    _juliusAppend('julius', '📎 Selecione apenas <strong>imagens</strong> (foto do comprovante). Áudios usam o 🎤.');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e => {
     juliusAttachedImage = { dataUrl: e.target.result, name: file.name };
     _juliusShowPreview(e.target.result, file.name);
   };
   reader.readAsDataURL(file);
-  event.target.value = '';
 }
 
 function _juliusShowPreview(dataUrl, name) {
@@ -6434,9 +6438,10 @@ async function juliusToggleMic() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     juliusAudioChunks = [];
 
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
-                   : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+    // Usar apenas o tipo base sem codec para máxima compatibilidade no mobile
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                    : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                   : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
                    : '';
 
     juliusMediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
@@ -6452,8 +6457,10 @@ async function juliusToggleMic() {
       btn.title = 'Gravar áudio';
       stream.getTracks().forEach(t => t.stop());
 
-      const blob = new Blob(juliusAudioChunks, { type: mimeType || 'audio/webm' });
-      if (blob.size < 500) return;
+      // Tipo limpo sem codec — alguns backends rejeitam "audio/webm;codecs=opus"
+      const actualType = (juliusMediaRecorder.mimeType || mimeType || 'audio/webm').split(';')[0];
+      const blob = new Blob(juliusAudioChunks, { type: actualType });
+      if (blob.size < 300) return; // gravação muito curta, ignorar
 
       const key = db.settings.groq_api_key;
       if (!key) {
@@ -6464,7 +6471,7 @@ async function juliusToggleMic() {
       btn.textContent = '⏳';
       btn.disabled = true;
       try {
-        const text = await _transcribeAudio(key, blob, mimeType);
+        const text = await _transcribeAudio(key, blob, actualType);
         if (text?.trim()) {
           const input = document.getElementById('julius-input');
           if (input) {
@@ -6497,25 +6504,39 @@ async function juliusToggleMic() {
   }
 }
 
-async function _transcribeAudio(apiKey, blob, mimeType) {
-  const ext = (mimeType || '').includes('mp4') ? 'm4a' : 'webm';
-  const formData = new FormData();
-  formData.append('file', blob, `audio.${ext}`);
-  formData.append('model', 'whisper-large-v3-turbo');
-  formData.append('language', 'pt');
-  formData.append('response_format', 'text');
+function _transcribeAudio(apiKey, blob, mimeType) {
+  return new Promise((resolve, reject) => {
+    // Extensão baseada no tipo real do blob
+    const ext = mimeType?.includes('mp4') ? 'm4a'
+              : mimeType?.includes('ogg') ? 'ogg'
+              : 'webm';
 
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` },
-    body: formData
+    const formData = new FormData();
+    formData.append('file', blob, `audio.${ext}`);
+    formData.append('model', 'whisper-large-v3-turbo');
+    formData.append('language', 'pt');
+    formData.append('response_format', 'text');
+
+    // XHR é mais estável que fetch para upload binário em Safari/WebKit mobile
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://api.groq.com/openai/v1/audio/transcriptions', true);
+    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    xhr.timeout = 40000; // 40s — conexão 3G pode ser lenta
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText || '');
+      } else {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = JSON.parse(xhr.responseText)?.error?.message || msg; } catch(e) {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror   = () => reject(new Error('Falha de rede. Verifique sua conexão.'));
+    xhr.ontimeout = () => reject(new Error('Tempo esgotado. Grave um áudio mais curto ou use Wi-Fi.'));
+
+    xhr.send(formData);
   });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
-  }
-  return res.text();
 }
 
 // ── Share Target: arquivo enviado via "Compartilhar" do celular ──
