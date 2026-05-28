@@ -755,14 +755,19 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 
 /* Julius — botões de ação (anexar / mic) */
 .julius-action-btn {
-  width:34px; height:34px; border-radius:8px;
+  width:38px; height:38px; border-radius:10px;
   background:var(--bg4); border:1px solid var(--border);
   cursor:pointer; display:flex; align-items:center; justify-content:center;
-  font-size:0.92rem; flex-shrink:0; transition:all 0.2s; color:var(--text2);
-  padding:0;
+  font-size:1rem; flex-shrink:0; transition:all 0.2s; color:var(--text2);
+  padding:0; -webkit-tap-highlight-color:transparent;
+  /* Touch target mínimo recomendado pelo Google: 48px */
+  min-width:44px; min-height:44px;
 }
 .julius-action-btn:hover { background:var(--bg3); color:var(--text); border-color:var(--green); }
 .julius-action-btn:disabled { opacity:0.4; cursor:not-allowed; }
+/* Mic com cor diferente pra não confundir com o clipe */
+.julius-mic-btn { border-color:rgba(64,196,255,0.3); color:var(--blue); }
+.julius-mic-btn:hover { border-color:var(--blue); background:rgba(64,196,255,0.1); }
 .julius-action-btn.recording {
   background:rgba(255,82,82,0.15); border-color:#ff5252; color:#ff5252;
   animation:juliusMicPulse 1s ease-in-out infinite;
@@ -6598,12 +6603,13 @@ function juliusKeydown(e) {
     </div>
     <button class="julius-header-close" onclick="toggleJulius()" title="Fechar">✕</button>
   </div>
+  <!-- input file fora da área dos botões para não interferir nos toques mobile -->
+  <input type="file" id="julius-file-input" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="juliusFileSelected(event)">
   <div id="julius-messages"></div>
   <div id="julius-preview"></div>
   <div class="julius-input-wrap">
-    <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Anexar comprovante">📎</button>
-    <input type="file" id="julius-file-input" accept="image/*" style="display:none" onchange="juliusFileSelected(event)">
-    <button class="julius-action-btn" id="julius-mic" onclick="juliusToggleMic()" title="Gravar áudio">🎤</button>
+    <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Foto do comprovante">📎</button>
+    <button class="julius-action-btn julius-mic-btn" id="julius-mic" onclick="juliusToggleMic()" title="Gravar áudio">🎤</button>
     <textarea
       id="julius-input"
       placeholder="Fala o que você gastou..."
