@@ -1126,6 +1126,31 @@ function userDocRef() {
   return fdb.collection('users').doc(currentUser.uid).collection('app').doc('data');
 }
 
+// Documento separado só para chaves de API — nunca sobrescrito pelo saveData()
+function userKeysDocRef() {
+  if (!currentUser) return null;
+  return fdb.collection('users').doc(currentUser.uid).collection('config').doc('keys');
+}
+
+async function loadUserKeys() {
+  const ref = userKeysDocRef();
+  if (!ref) return;
+  try {
+    const snap = await ref.get();
+    if (snap.exists) {
+      const keys = snap.data();
+      if (keys.groq_api_key) db.settings.groq_api_key = keys.groq_api_key;
+    }
+  } catch(e) { console.warn('Erro ao carregar chaves:', e); }
+}
+
+async function _saveGroqKeyToCloud(key) {
+  const ref = userKeysDocRef();
+  if (!ref) return;
+  // merge:true nunca apaga outros campos do documento
+  await ref.set({ groq_api_key: key }, { merge: true });
+}
+
 async function loadFromCloud() {
   const ref = userDocRef();
   if (!ref) return;
@@ -1149,6 +1174,8 @@ async function loadFromCloud() {
   } finally {
     isLoadingFromCloud = false;
   }
+  // Chaves de API ficam num documento separado — carrega por último para ter prioridade
+  await loadUserKeys();
   // Escuta mudanças em tempo real — qualquer salvo em outro dispositivo atualiza aqui
   _subscribeToCloud();
 }
@@ -6807,18 +6834,26 @@ async function _checkPendingShare() {
   } catch(e) {}
 }
 
-function saveGroqKey() {
+async function saveGroqKey() {
   const key = document.getElementById('groqApiKey')?.value.trim();
   if (!key) { alert('Cole sua chave API do Groq antes de salvar.'); return; }
   if (!key.startsWith('gsk_')) {
     alert('Chave inválida. A chave Groq começa com "gsk_". Copie direto do console.groq.com.');
     return;
   }
-  db.settings.groq_api_key = key;
-  saveData();
   const status = document.getElementById('groqKeyStatus');
-  if (status) status.innerHTML = '<span style="color:var(--green)">✅ Salva e sincronizando...</span>';
-  setTimeout(() => testGroqKey(), 1500);
+  if (status) status.innerHTML = '<span style="color:var(--text3)">⏳ Salvando...</span>';
+  try {
+    db.settings.groq_api_key = key;
+    // Salva imediatamente no documento dedicado (sem debounce, nunca sobrescrito)
+    await _saveGroqKeyToCloud(key);
+    // Também atualiza o documento principal para compatibilidade
+    await writeToCloud();
+    if (status) status.innerHTML = '<span style="color:var(--green)">✅ Salva na sua conta — vale em todos os dispositivos!</span>';
+    setTimeout(() => testGroqKey(), 500);
+  } catch(e) {
+    if (status) status.innerHTML = `<span style="color:var(--red)">❌ Erro ao salvar: ${e.message}</span>`;
+  }
 }
 
 async function testGroqKey() {
