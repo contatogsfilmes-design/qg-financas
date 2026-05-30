@@ -1153,6 +1153,42 @@ async function _saveGroqKeyToCloud(key) {
   await ref.set({ groq_api_key: key }, { merge: true });
 }
 
+// Histórico do Julius — documento separado para não poluir os dados financeiros
+function userJuliusDocRef() {
+  if (!currentUser) return null;
+  return fdb.collection('users').doc(currentUser.uid).collection('julius').doc('chat');
+}
+
+let _juliusSaveTimeout = null;
+function _saveJuliusHistory() {
+  if (!currentUser) return;
+  if (_juliusSaveTimeout) clearTimeout(_juliusSaveTimeout);
+  _juliusSaveTimeout = setTimeout(async () => {
+    const ref = userJuliusDocRef();
+    if (!ref) return;
+    try {
+      // Salva últimas 100 mensagens (sem base64 de imagens para não estourar 1MB)
+      const toSave = juliusHistory.slice(-100).map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content.substring(0, 3000) : ''
+      }));
+      await ref.set({ history: toSave, updated: Date.now() });
+    } catch(e) { console.warn('Julius history save error:', e); }
+  }, 2000);
+}
+
+async function _loadJuliusHistory() {
+  const ref = userJuliusDocRef();
+  if (!ref) return;
+  try {
+    const snap = await ref.get();
+    if (snap.exists && snap.data().history?.length) {
+      juliusHistory = snap.data().history;
+      console.log(`[Julius] Histórico carregado: ${juliusHistory.length} mensagens`);
+    }
+  } catch(e) { console.warn('Julius history load error:', e); }
+}
+
 async function loadFromCloud() {
   const ref = userDocRef();
   if (!ref) return;
@@ -1178,6 +1214,8 @@ async function loadFromCloud() {
   }
   // Chaves de API ficam num documento separado — carrega por último para ter prioridade
   await loadUserKeys();
+  // Histórico do Julius — carrega conversas anteriores
+  await _loadJuliusHistory();
   // Escuta mudanças em tempo real — qualquer salvo em outro dispositivo atualiza aqui
   _subscribeToCloud();
 }
@@ -6120,18 +6158,33 @@ function _juliusWelcome() {
     _juliusAppend('julius',
       `Oi! Sou o <strong>Julius</strong>, seu consultor financeiro pessoal. 💰<br><br>` +
       `Antes de começar, preciso da sua chave da API Groq — é de graça, eu juro!<br><br>` +
-      `👉 Vai em <strong>Configurações → IA Julius (Groq)</strong>, cola sua chave e volta aqui. ` +
-      `Aí eu coloco a mão na massa nas suas finanças.`
+      `👉 Vai em <strong>Configurações → IA Julius (Groq)</strong>, cola sua chave e volta aqui.`
     );
     return;
   }
+
+  // Se tem histórico salvo, restaura as últimas mensagens na UI
+  if (juliusHistory.length > 0) {
+    const box = document.getElementById('julius-messages');
+    if (box) {
+      const ultimas = juliusHistory.slice(-20);
+      ultimas.forEach(m => {
+        const role = m.role === 'user' ? 'user' : 'julius';
+        // Limpa tags de ação do histórico antes de exibir
+        let txt = m.content.replace(/<julius_actions>[\s\S]*?<\/julius_actions>/gi, '').trim();
+        txt = txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                 .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+        if (txt) _juliusAppend(role, txt);
+      });
+    }
+    return; // não mostra mensagem de boas vindas se já tem histórico
+  }
+
   const nome = (db.settings.username || 'chefe').split(' ')[0];
   const saldo = calcTotalCaixa();
-  let msg = `E aí, ${nome}! Pode falar o que você gastou hoje, o que recebeu, o que ainda vai pagar... ` +
-    `Fala naturalmente que eu registro tudo. 😎`;
+  let msg = `E aí, ${nome}! Pode falar o que você gastou hoje, o que recebeu, o que ainda vai pagar... Fala naturalmente que eu registro tudo. 😎`;
   if (saldo < 1000) {
-    msg += `<br><br>⚠️ <strong>Já vou avisando:</strong> você tá com <strong>R$ ${fmtMoney(saldo)}</strong> no caixa. ` +
-      `Se não tomar cuidado, vai andar apertado!`;
+    msg += `<br><br>⚠️ <strong>Já vou avisando:</strong> você tá com <strong>R$ ${fmtMoney(saldo)}</strong> no caixa.`;
   }
   _juliusAppend('julius', msg);
 }
@@ -6224,15 +6277,18 @@ async function sendJuliusMessage() {
 
     // Empurra para o histórico só texto (sem base64)
     juliusHistory.push({ role: 'user', content: userTextFinal });
+    _saveJuliusHistory();
 
     // PASSO 2: chama o chat normal com o contexto completo (sem imagem)
     const raw = await _callGroq(key, juliusHistory);
+    console.log('[Julius] Raw response:', raw.substring(0, 500));
     _juliusTypingStop();
     const { message, actions } = _parseJuliusResponse(raw);
     if (actions.length > 0) _executeJuliusActions(actions);
     _juliusAppend('julius', message);
     juliusHistory.push({ role: 'assistant', content: raw });
-    if (juliusHistory.length > 20) juliusHistory = juliusHistory.slice(-16);
+    _saveJuliusHistory();
+    if (juliusHistory.length > 60) juliusHistory = juliusHistory.slice(-50);
 
   } catch(e) {
     _juliusTypingStop();
@@ -6332,16 +6388,16 @@ ${clientesStr}
 ${bancosJSON}
 
 ━━ FORMATO DE AÇÕES ━━
-Quando precisar registrar dados, inclua ao FINAL da mensagem um bloco entre <<<AÇÕES>>> e <<<FIM>>>. Este bloco NÃO aparece para o usuário.
+Quando precisar registrar dados, inclua ao FINAL da mensagem um bloco <julius_actions>...</julius_actions>. Este bloco NAO aparece para o usuario.
 
-<<<AÇÕES>>>
+<julius_actions>
 [
   {
     "tipo": "add_gasto",
     "dados": {
       "valor": 10.99,
       "descricao": "Uber",
-      "forma_raw": "ID_DO_BANCO (débito/pix) ou 'cred_'+ID (crédito) ou 'dinheiro'",
+      "forma_raw": "ID_DO_BANCO (debito/pix) ou 'cred_'+ID (credito) ou 'dinheiro'",
       "data": "${todayISO}",
       "tag": "Uber"
     }
@@ -6349,13 +6405,13 @@ Quando precisar registrar dados, inclua ao FINAL da mensagem um bloco entre <<<A
   {
     "tipo": "add_custo_mensal",
     "dados": {
-      "nome": "Carnê Magalu",
+      "nome": "Carne Magalu",
       "valor": 350.00,
       "dia_vencimento": 20
     }
   }
 ]
-<<<FIM>>>
+</julius_actions>
 
 TIPOS DE AÇÃO DISPONÍVEIS:
 - add_gasto: { valor, descricao, forma_raw, data, tag? }
@@ -6449,7 +6505,7 @@ function _callGroq(apiKey, history) {
     model: 'llama-3.3-70b-versatile',
     messages,
     temperature: 0.72,
-    max_tokens: 1200
+    max_tokens: 2000
   });
 
   return new Promise((resolve, reject) => {
@@ -6495,10 +6551,25 @@ function _parseJuliusResponse(raw) {
   let actions = [];
   let message = raw;
 
-  const match = raw.match(/<<<AÇÕES>>>([\s\S]*?)<<<FIM>>>/i);
-  if (match) {
-    try { actions = JSON.parse(match[1].trim()); } catch(e) { console.warn('Julius parse error:', e); }
-    message = raw.replace(/<<<AÇÕES>>>[\s\S]*?<<<FIM>>>/gi, '').trim();
+  // Tenta tag XML nova (julius_actions) e também o formato antigo como fallback
+  const patterns = [
+    /<julius_actions>([\s\S]*?)<\/julius_actions>/i,
+    /<<<AÇÕES>>>([\s\S]*?)<<<FIM>>>/i,
+    /<<<ACOES>>>([\s\S]*?)<<<FIM>>>/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match) {
+      try {
+        actions = JSON.parse(match[1].trim());
+        message = raw.replace(match[0], '').trim();
+        console.log('[Julius] Ações parseadas:', actions.length);
+      } catch(e) {
+        console.warn('[Julius] Erro ao parsear ações:', e.message, '\nBloco:', match[1].substring(0,200));
+      }
+      break;
+    }
   }
 
   message = message
