@@ -6531,9 +6531,9 @@ function openJuliusFromNav() {
   if (!juliusOpen) toggleJulius();
 }
 
-// ── Compressão de imagem — reduz pra max 150px JPEG 0.35 (ultra-leve pra mobile) ─────
+// ── Compressão de imagem — max 1000px JPEG 0.75 (legível para comprovantes) ─────
 function _compressImage(dataUrl, maxPx, quality) {
-  maxPx = maxPx || 150; quality = quality || 0.35;
+  maxPx = maxPx || 1000; quality = quality || 0.75;
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
@@ -6561,16 +6561,29 @@ async function juliusFileSelected(event) {
   const file = event.target.files[0];
   event.target.value = '';
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    _juliusAppend('julius', '📎 Selecione apenas <strong>imagens</strong> (foto do comprovante).');
+
+  if (file.type === 'application/pdf') {
+    _juliusAppend('julius', '📄 PDF não funciona direto. Tire um <strong>print/screenshot</strong> do extrato e manda a imagem — funciona muito melhor!');
     return;
   }
+  if (!file.type.startsWith('image/')) {
+    _juliusAppend('julius', '📎 Manda uma <strong>foto ou print</strong> do comprovante (JPEG, PNG, WEBP).');
+    return;
+  }
+
+  _juliusAppend('julius', '🖼️ Carregando imagem...');
   const reader = new FileReader();
   reader.onload = async e => {
     const compressed = await _compressImage(e.target.result);
     juliusAttachedImage = { dataUrl: compressed, name: file.name };
     _juliusShowPreview(compressed, file.name);
+    // Remove mensagem "carregando"
+    const msgs = document.getElementById('julius-messages');
+    if (msgs?.lastElementChild?.textContent?.includes('Carregando imagem')) {
+      msgs.lastElementChild.remove();
+    }
   };
+  reader.onerror = () => _juliusAppend('julius', '❌ Erro ao ler o arquivo. Tente de novo.');
   reader.readAsDataURL(file);
 }
 
@@ -6603,8 +6616,14 @@ async function juliusToggleMic() {
     return;
   }
 
+  const key = db.settings.groq_api_key;
+  if (!key) {
+    _juliusAppend('julius', '⚙️ Configure a chave Groq em Configurações antes de usar o áudio.');
+    return;
+  }
+
   if (!navigator.mediaDevices?.getUserMedia) {
-    alert('Gravação de áudio não suportada neste navegador.');
+    _juliusAppend('julius', '❌ Gravação de áudio não suportada neste navegador. Tente Chrome ou Safari.');
     return;
   }
 
@@ -6612,11 +6631,12 @@ async function juliusToggleMic() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     juliusAudioChunks = [];
 
-    // Usar apenas o tipo base sem codec para máxima compatibilidade no mobile
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-                   : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-                   : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
-                   : '';
+    // iOS Safari só suporta mp4 — testar na ordem certa
+    let mimeType = '';
+    const tipos = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
+    for (const t of tipos) {
+      if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
+    }
 
     juliusMediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
 
@@ -6631,21 +6651,19 @@ async function juliusToggleMic() {
       btn.title = 'Gravar áudio';
       stream.getTracks().forEach(t => t.stop());
 
-      // Tipo limpo sem codec — alguns backends rejeitam "audio/webm;codecs=opus"
-      const actualType = (juliusMediaRecorder.mimeType || mimeType || 'audio/webm').split(';')[0];
-      const blob = new Blob(juliusAudioChunks, { type: actualType });
-      if (blob.size < 300) return; // gravação muito curta, ignorar
+      const actualMime = (juliusMediaRecorder.mimeType || mimeType || 'audio/webm').split(';')[0];
+      const blob = new Blob(juliusAudioChunks, { type: actualMime });
 
-      const key = db.settings.groq_api_key;
-      if (!key) {
-        _juliusAppend('julius', '⚙️ Precisa da chave Groq pra transcrever o áudio! Configure em Configurações.');
+      if (blob.size < 500) {
+        _juliusAppend('julius', '⚠️ Áudio muito curto. Segura o botão, fala e solta.');
         return;
       }
 
       btn.textContent = '⏳';
       btn.disabled = true;
+      _juliusAppend('julius', '🎧 Transcrevendo seu áudio...');
       try {
-        const text = await _transcribeAudio(key, blob, actualType);
+        const text = await _transcribeAudio(key, blob, actualMime);
         if (text?.trim()) {
           const input = document.getElementById('julius-input');
           if (input) {
@@ -6654,24 +6672,31 @@ async function juliusToggleMic() {
             input.style.height = Math.min(input.scrollHeight, 100) + 'px';
             input.focus();
           }
+          // Remove mensagem "transcrevendo"
+          const msgs = document.getElementById('julius-messages');
+          if (msgs?.lastElementChild?.textContent?.includes('Transcrevendo')) {
+            msgs.lastElementChild.remove();
+          }
+        } else {
+          _juliusAppend('julius', '⚠️ Não consegui entender o áudio. Fala mais perto do microfone e tente de novo.');
         }
       } catch(e) {
-        _juliusAppend('julius', `❌ Erro na transcrição do áudio: <em>${e.message}</em>`);
+        _juliusAppend('julius', `❌ Erro na transcrição: <em>${e.message}</em>`);
       } finally {
         btn.textContent = '🎤';
         btn.disabled = false;
       }
     };
 
-    juliusMediaRecorder.start();
+    juliusMediaRecorder.start(100); // coleta chunks a cada 100ms
     juliusRecording = true;
     btn.classList.add('recording');
     btn.textContent = '⏹️';
-    btn.title = 'Parar gravação';
+    btn.title = 'Toque para parar';
 
   } catch(e) {
     if (e.name === 'NotAllowedError') {
-      alert('Permissão de microfone negada. Autorize nas configurações do navegador e tente de novo.');
+      _juliusAppend('julius', '🎤 Permissão de microfone negada. Autorize nas configurações do navegador.');
     } else {
       alert('Erro ao acessar microfone: ' + e.message);
     }

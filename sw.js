@@ -16,6 +16,10 @@ self.addEventListener('activate', event => event.waitUntil(self.clients.claim())
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'POST') return;
 
+  // Só intercepta share targets para esta origem — não toca em APIs externas (Groq, Firebase, etc.)
+  const reqUrl = new URL(event.request.url);
+  if (reqUrl.origin !== self.location.origin) return;
+
   event.respondWith((async () => {
     try {
       const formData = await event.request.formData();
