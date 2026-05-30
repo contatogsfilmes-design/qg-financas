@@ -5084,11 +5084,14 @@ function renderSettings() {
               value="${db.settings.groq_api_key || ''}"
               placeholder="gsk_...cole sua chave aqui">
           </div>
-          <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
-            <button class="btn btn-primary btn-sm" onclick="saveGroqKey()">💾 Salvar Chave</button>
-            ${db.settings.groq_api_key
-              ? '<span style="color:var(--green);font-size:0.78rem">✅ Julius ativo</span>'
-              : '<span style="color:var(--text3);font-size:0.78rem">⚠️ Chave não configurada</span>'}
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveGroqKey()">💾 Salvar</button>
+            <button class="btn btn-sm" style="border-color:var(--blue);color:var(--blue)" onclick="testGroqKey()">🔍 Testar Chave</button>
+            <span id="groqKeyStatus" style="font-size:0.78rem">
+              ${db.settings.groq_api_key
+                ? '<span style="color:var(--text3)">✅ Chave salva — clique em Testar para validar</span>'
+                : '<span style="color:var(--text3)">⚠️ Chave não configurada</span>'}
+            </span>
           </div>
         </div>
 
@@ -6802,10 +6805,42 @@ async function _checkPendingShare() {
 function saveGroqKey() {
   const key = document.getElementById('groqApiKey')?.value.trim();
   if (!key) { alert('Cole sua chave API do Groq antes de salvar.'); return; }
+  if (!key.startsWith('gsk_')) {
+    alert('Chave inválida. A chave Groq começa com "gsk_". Copie direto do console.groq.com.');
+    return;
+  }
   db.settings.groq_api_key = key;
   saveData();
-  renderSettings();
-  alert('✅ Chave Julius (Groq) salva! Agora abra o Julius e converse com suas finanças.');
+  const status = document.getElementById('groqKeyStatus');
+  if (status) status.innerHTML = '<span style="color:var(--green)">✅ Salva e sincronizando...</span>';
+  setTimeout(() => testGroqKey(), 1500);
+}
+
+async function testGroqKey() {
+  const status = document.getElementById('groqKeyStatus');
+  const key = db.settings.groq_api_key;
+  if (!key) {
+    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Nenhuma chave salva</span>';
+    return;
+  }
+  if (status) status.innerHTML = '<span style="color:var(--text3)">🔄 Testando...</span>';
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${key}` }
+    });
+    if (res.ok) {
+      if (status) status.innerHTML = '<span style="color:var(--green)">✅ Chave válida — Julius pronto!</span>';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.error?.message || `Erro ${res.status}`;
+      if (status) status.innerHTML = `<span style="color:var(--red)">❌ ${msg}</span>`;
+      if (res.status === 401) {
+        if (status) status.innerHTML = '<span style="color:var(--red)">❌ Chave inválida — gere uma nova em console.groq.com</span>';
+      }
+    }
+  } catch(e) {
+    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Sem conexão para testar</span>';
+  }
 }
 
 function juliusKeydown(e) {
