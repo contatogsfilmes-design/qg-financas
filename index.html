@@ -1604,12 +1604,17 @@ function renderDashboard() {
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
           <div style="text-align:right">
-            <div style="font-size:0.65rem;color:var(--text3);letter-spacing:2px">RECEBIDOS BRUTO</div>
-            <div style="font-family:var(--font-head);font-size:1rem;color:var(--green)">+ R$ ${fmtMoney(recebidosBruto)}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:0.65rem;color:var(--text3);letter-spacing:2px">GASTOS BRUTO</div>
-            <div style="font-family:var(--font-head);font-size:1rem;color:var(--red)">− R$ ${fmtMoney(gastosBruto)}</div>
+            <div style="font-size:0.6rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase">${new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).toUpperCase()}</div>
+            <div style="display:flex;gap:14px;margin-top:4px">
+              <div>
+                <div style="font-size:0.58rem;color:var(--text3);letter-spacing:1.5px">RECEBIDO</div>
+                <div style="font-family:var(--font-head);font-size:1rem;color:var(--green)">+ R$ ${fmtMoney(entradasMonth)}</div>
+              </div>
+              <div>
+                <div style="font-size:0.58rem;color:var(--text3);letter-spacing:1.5px">GASTO</div>
+                <div style="font-family:var(--font-head);font-size:1rem;color:var(--red)">− R$ ${fmtMoney(gastosMonth)}</div>
+              </div>
+            </div>
           </div>
           <div style="text-align:right">
             <div style="font-size:0.65rem;color:var(--text3);letter-spacing:2px">🐷 COFRINHOS</div>
