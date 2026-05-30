@@ -971,6 +971,8 @@ let charts = {};
 let currentUser = null;
 let saveTimeout = null;
 let isLoadingFromCloud = false;
+let isSavingToCloud = false;
+let cloudUnsubscribe = null;
 let gastosFilterStart = null;
 let gastosFilterEnd = null;
 
@@ -1145,11 +1147,14 @@ async function loadFromCloud() {
   } finally {
     isLoadingFromCloud = false;
   }
+  // Escuta mudanças em tempo real — qualquer salvo em outro dispositivo atualiza aqui
+  _subscribeToCloud();
 }
 
 async function writeToCloud() {
   const ref = userDocRef();
   if (!ref) return;
+  isSavingToCloud = true;
   try {
     await ref.set(db);
     const el = document.getElementById('lastSaved');
@@ -1161,7 +1166,29 @@ async function writeToCloud() {
     console.error('Erro ao salvar:', e);
     const el = document.getElementById('lastSaved');
     if (el) el.textContent = '⚠️ Erro ao salvar';
+  } finally {
+    isSavingToCloud = false;
   }
+}
+
+function _subscribeToCloud() {
+  if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+  const ref = userDocRef();
+  if (!ref) return;
+  let firstFire = true;
+  cloudUnsubscribe = ref.onSnapshot(snap => {
+    if (firstFire) { firstFire = false; return; } // ignora disparo inicial (já carregamos)
+    if (isLoadingFromCloud || isSavingToCloud || saveTimeout) return; // é nossa própria escrita
+    if (!snap.exists) return;
+    db = deepMerge(getDefaultDB(), snap.data());
+    try {
+      updateBadges();
+      updateUserProfile();
+      navigate(currentPage);
+      const el = document.getElementById('lastSaved');
+      if (el) el.textContent = '☁️ Sincronizado';
+    } catch(e) {}
+  }, err => console.warn('onSnapshot erro:', err));
 }
 
 // saveData() agora é debounced — agrupa edições rápidas em 1 escrita
@@ -1271,6 +1298,7 @@ auth.onAuthStateChanged(async (user) => {
     startApp();
   } else {
     currentUser = null;
+    if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
     document.getElementById('authLoading').style.display = 'none';
     document.getElementById('loginCard').style.display = 'block';
     document.getElementById('loginNote').style.display = 'block';
