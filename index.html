@@ -6371,40 +6371,59 @@ Para marcar_custo_pago: custo_id é o id do custo da lista CUSTOS MENSAIS FIXOS 
 }
 
 // ── Passo 1: analisa só a imagem (payload pequeno, sem system prompt) ──
-function _analyzeReceiptImage(apiKey, imageDataUrl) {
-  return new Promise((resolve, reject) => {
-    const kbSize = Math.round(imageDataUrl.length * 0.75 / 1024);
-    console.log(`[Julius] Imagem: ~${kbSize}KB (base64 chars: ${imageDataUrl.length})`);
+// Modelos de visão em ordem de preferência — tenta o próximo se o atual falhar
+const _VISION_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'llama-3.2-90b-vision-preview'
+];
 
+async function _analyzeReceiptImage(apiKey, imageDataUrl) {
+  const kbSize = Math.round(imageDataUrl.length * 0.75 / 1024);
+  console.log(`[Julius] Imagem: ~${kbSize}KB`);
+
+  for (const model of _VISION_MODELS) {
+    try {
+      const result = await _tryVisionModel(apiKey, model, imageDataUrl);
+      console.log(`[Julius] Vision OK com modelo: ${model}`);
+      return result;
+    } catch(e) {
+      console.warn(`[Julius] Vision falhou (${model}):`, e.message);
+      // Se for erro de modelo indisponível, tenta o próximo
+      if (e.message.includes('model') || e.message.includes('404') || e.message.includes('deactivated') || e.message.includes('not found')) continue;
+      // Outros erros (auth, rede) — não adianta tentar outro modelo
+      throw e;
+    }
+  }
+  throw new Error('Nenhum modelo de visão disponível. Descreva o comprovante no texto.');
+}
+
+function _tryVisionModel(apiKey, model, imageDataUrl) {
+  return new Promise((resolve, reject) => {
     const body = JSON.stringify({
-      model: 'llama-3.2-90b-vision-preview',
+      model,
       messages: [{
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: imageDataUrl } },
-          { type: 'text', text: 'Analise este comprovante de pagamento. Extraia em português: valor pago, para quem foi (loja/serviço/pessoa), método de pagamento (Pix, débito, crédito, dinheiro), banco ou carteira usado, e data se visível. Seja breve e direto.' }
+          { type: 'text', text: 'Analise este extrato ou comprovante. Extraia em português: valores, datas, estabelecimentos, método de pagamento (Pix, débito, crédito, dinheiro) e banco. Seja breve e direto.' }
         ]
       }],
       temperature: 0.1,
-      max_tokens: 250
+      max_tokens: 400
     });
-
-    console.log(`[Julius] Body da análise: ~${Math.round(body.length/1024)}KB`);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', 'https://api.groq.com/openai/v1/chat/completions', true);
     xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.timeout = 40000;
+    xhr.timeout = 45000;
 
     xhr.onload = () => {
       const raw = xhr.responseText || '';
-      console.log(`[Julius] Vision status: ${xhr.status}`);
+      console.log(`[Julius] Vision ${model} status: ${xhr.status}`);
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (raw.trimStart().startsWith('<')) {
-          reject(new Error('Chave Groq inválida ou API fora do ar'));
-          return;
-        }
+        if (raw.trimStart().startsWith('<')) { reject(new Error('HTML response')); return; }
         try { resolve(JSON.parse(raw).choices[0].message.content); }
         catch(e) { reject(new Error('Resposta inválida')); }
       } else {
@@ -6413,11 +6432,8 @@ function _analyzeReceiptImage(apiKey, imageDataUrl) {
         reject(new Error(msg));
       }
     };
-    xhr.onerror   = () => {
-      console.log(`[Julius] onerror — status:${xhr.status} state:${xhr.readyState}`);
-      reject(new Error(`Falha de rede (status:${xhr.status})`));
-    };
-    xhr.ontimeout = () => reject(new Error('Timeout (40s) — tente em Wi-Fi'));
+    xhr.onerror   = () => reject(new Error('Falha de rede'));
+    xhr.ontimeout = () => reject(new Error('Timeout — tente em Wi-Fi'));
     xhr.send(body);
   });
 }
