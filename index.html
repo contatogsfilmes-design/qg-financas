@@ -701,6 +701,7 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 .julius-msg-user .julius-bubble {
   background:var(--green3); color:var(--text);
   border:1px solid var(--border); border-bottom-right-radius:4px;
+  max-width:100%; min-width:40px;
 }
 .julius-typing span {
   display:inline-block; width:6px; height:6px; border-radius:50%;
@@ -739,6 +740,7 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 
 @media (max-width:760px) {
   #julius-fab { bottom:calc(16px + env(safe-area-inset-bottom, 0px)); right:16px; }
+  #julius-fab.open { display:none; }
   #julius-panel {
     position:fixed;
     top:env(safe-area-inset-top, 0px);
