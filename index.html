@@ -3769,6 +3769,18 @@ function _calcReceitaFixaMensal() {
     .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0);
 }
 
+function _calcReceitaMes(mesStr) {
+  const fixo = _calcReceitaFixaMensal();
+  const mesAtual = new Date().toISOString().substring(0, 7);
+  // Freelances pendentes somam só no mês atual (são pontuais, não previsíveis no futuro)
+  const freelance = mesStr === mesAtual
+    ? db.clientes
+        .filter(c => c.tipo_cobranca === 'freelance' && !c.freelance_pago)
+        .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0)
+    : 0;
+  return { fixo, freelance, total: fixo + freelance };
+}
+
 function _renderProjecaoCustos(perfilFiltro) {
   const hoje = new Date();
   const meses = Array.from({length: 12}, (_, i) => {
@@ -3776,15 +3788,15 @@ function _renderProjecaoCustos(perfilFiltro) {
     return d.toISOString().substring(0, 7);
   });
 
-  const receita = _calcReceitaFixaMensal();
   const isPrimario = perfilFiltro === (_getPerfis()[0] || 'Eu');
-
   const totalCustosAnual = meses.reduce((a, m) => a + _calcCustoMes(m, perfilFiltro), 0);
-  const totalLiquidoAnual = isPrimario ? (receita * 12) - totalCustosAnual : null;
+  const receitaFixa = _calcReceitaFixaMensal();
+  const totalLiquidoAnual = isPrimario ? (receitaFixa * 12) - totalCustosAnual : null;
 
   const rows = meses.map((m, i) => {
     const custo = _calcCustoMes(m, perfilFiltro);
-    const liquido = isPrimario ? receita - custo : null;
+    const rec = isPrimario ? _calcReceitaMes(m) : null;
+    const liquido = rec ? rec.total - custo : null;
     const label = new Date(m + '-02').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const labelFmt = label.charAt(0).toUpperCase() + label.slice(1);
     const liquidoHtml = liquido !== null
@@ -3805,10 +3817,12 @@ function _renderProjecaoCustos(perfilFiltro) {
   const headerReceita = isPrimario
     ? `<th style="text-align:right;font-size:0.65rem;color:var(--text3);letter-spacing:1px;padding:4px 6px">LÍQUIDO</th>`
     : '';
+  const freelancePend = db.clientes.filter(c => c.tipo_cobranca==='freelance' && !c.freelance_pago).reduce((a,c)=>a+parseFloat(c.valor_mensal||0),0);
   const receitaInfo = isPrimario
     ? `<div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px">
-        💵 Receita fixa mensal (clientes): <strong style="color:var(--green)">R$ ${fmtMoney(receita)}</strong>
-        ${receita === 0 ? ' <span style="color:var(--text3);font-size:0.7rem">(nenhum cliente mensal cadastrado)</span>' : ''}
+        💵 Fixo/mês: <strong style="color:var(--green)">R$ ${fmtMoney(receitaFixa)}</strong>
+        ${freelancePend > 0 ? ` &nbsp;+&nbsp; 🎯 Freelances pendentes (mês atual): <strong style="color:var(--blue)">R$ ${fmtMoney(freelancePend)}</strong>` : ''}
+        ${receitaFixa === 0 && freelancePend === 0 ? ' <span style="color:var(--text3);font-size:0.7rem">(nenhum cliente cadastrado)</span>' : ''}
        </div>`
     : '';
   const totalLiquidoHtml = totalLiquidoAnual !== null
@@ -3870,8 +3884,9 @@ function _abrirDetalheProjecao(mesStr, perfilFiltro) {
   }).join('');
 
   const isPrimario = perfilFiltro === (_getPerfis()[0] || 'Eu');
-  const receita = isPrimario ? _calcReceitaFixaMensal() : 0;
-  const liquido = isPrimario ? receita - total : null;
+  const rec = isPrimario ? _calcReceitaMes(mesStr) : null;
+  const receita = rec ? rec.total : 0;
+  const liquido = rec ? rec.total - total : null;
 
   openModal(`📅 ${labelFmt} — ${perfilFiltro}`, `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
@@ -3881,8 +3896,9 @@ function _abrirDetalheProjecao(mesStr, perfilFiltro) {
       </div>
       ${isPrimario ? `
       <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 14px;flex:1">
-        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">RECEITA FIXA</div>
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">RECEITA</div>
         <div style="font-family:var(--font-head);font-size:1.2rem;color:var(--green)">R$ ${fmtMoney(receita)}</div>
+        ${rec && rec.freelance > 0 ? `<div style="font-size:0.65rem;color:var(--blue)">Fixo R$ ${fmtMoney(rec.fixo)} + Freelance R$ ${fmtMoney(rec.freelance)}</div>` : ''}
       </div>
       <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 14px;flex:1;border:1px solid ${liquido>=0?'rgba(0,230,118,0.3)':'rgba(255,82,82,0.3)'}">
         <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">LÍQUIDO</div>
