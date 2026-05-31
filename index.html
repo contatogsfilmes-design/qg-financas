@@ -1347,23 +1347,41 @@ function startApp() {
 function _resetCustosMensaisSeNovomes() {
   const mesAtual = new Date().toISOString().substring(0, 7);
   const ultimoReset = db.settings.custos_ultimo_reset || '';
-  if (ultimoReset === mesAtual) return; // já resetou este mês
+  if (ultimoReset === mesAtual) return;
 
+  const [y, m] = mesAtual.split('-').map(Number);
+  const mesAnterior = new Date(y, m - 2, 1).toISOString().substring(0, 7);
+  const toRemove = [];
   let alterou = false;
+
   db.custos_mensais.forEach(c => {
+    const mesInicio = c.mes_inicio || null;
+
+    // Parcelado que ainda não chegou no mês de início — não toca
+    if (c.tipo_custo === 'parcelado' && mesInicio && mesAtual < mesInicio) return;
+
     if (c.pago) {
-      // Estava pago no mês anterior → reseta para pendente no novo mês
+      if (c.tipo_custo === 'parcelado') {
+        c.parcelas_pagas = (c.parcelas_pagas || 0) + 1;
+        if (c.parcelas_pagas >= (c.parcelas_total || 1)) {
+          toRemove.push(c.id); alterou = true; return;
+        }
+      }
       c.pago = false;
-      delete c.valor_atrasado;
+      c.valor_atrasado = 0;
     } else {
-      // Não foi pago no mês anterior → acumula como atrasado
-      c.valor_atrasado = parseFloat(c.valor_atrasado || 0) + parseFloat(c.valor || 0);
+      // Só marca atrasado se o custo já devia ter aparecido no mês passado
+      const jaAtivo = !mesInicio || mesInicio <= mesAnterior;
+      if (jaAtivo) {
+        c.valor_atrasado = parseFloat(c.valor_atrasado || 0) + parseFloat(c.valor || 0);
+      }
     }
     alterou = true;
   });
 
+  if (toRemove.length) db.custos_mensais = db.custos_mensais.filter(c => !toRemove.includes(c.id));
   db.settings.custos_ultimo_reset = mesAtual;
-  if (alterou) saveData();
+  if (alterou || toRemove.length) saveData();
 }
 
 // Registrar Service Worker para PWA share target
@@ -2883,11 +2901,31 @@ function renderCofrinhoCard(c) {
   const meta  = parseFloat(c.meta || 0);
   const pct   = meta > 0 ? Math.min(100, (saldo / meta) * 100) : 0;
   const cor   = c.cor || 'var(--green)';
+  const isConsorcio = c.tipo === 'consorcio';
+
+  let consorcioInfo = '';
+  if (isConsorcio) {
+    const vm = parseFloat(c.consorcio_valor_mensal || 0);
+    const mt = c.consorcio_meses_total || 0;
+    const mi = c.consorcio_mes_inicio || '';
+    const mesesDepositados = mt > 0 ? Math.min(mt, Math.round(saldo / (vm || 1))) : 0;
+    const restantes = Math.max(0, mt - mesesDepositados);
+    const fimDate = mi ? (() => { const [y,mo]=mi.split('-').map(Number); const d=new Date(y,mo-1+mt-1,1); return d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}); })() : '';
+    consorcioInfo = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:0.75rem;color:var(--text3)">
+        <span>📆 R$ ${fmtMoney(vm)}/mês</span>
+        <span>⏱️ ${mesesDepositados}/${mt} meses</span>
+        ${restantes > 0 ? `<span>📍 Falta ${restantes} mes${restantes>1?'es':''} (até ${fimDate})</span>` : '<span style="color:var(--green)">✅ Concluído!</span>'}
+      </div>`;
+  }
+
   return `
     <div class="card" style="border-top:3px solid ${cor};position:relative">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
         <div style="flex:1">
-          <div style="font-size:1rem;font-weight:700;color:var(--text)">${c.emoji||'🐷'} ${c.nome}</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--text)">${c.emoji||'🐷'} ${c.nome}
+            ${isConsorcio ? '<span style="font-size:0.65rem;color:var(--blue);font-weight:400;margin-left:4px">CONSÓRCIO</span>' : ''}
+          </div>
           ${c.descricao?`<div style="font-size:0.75rem;color:var(--text3);margin-top:2px">${c.descricao}</div>`:''}
         </div>
         <div style="display:flex;gap:4px">
@@ -2909,6 +2947,7 @@ function renderCofrinhoCard(c) {
           </div>
           <div style="font-size:0.7rem;color:var(--text3);margin-top:4px">${pct.toFixed(1)}% da meta ${pct>=100?'<span style="color:'+cor+'">✅ ATINGIDA!</span>':''}</div>
         `:''}
+        ${consorcioInfo}
       </div>
 
       ${(c.movs||[]).length>0?`
@@ -2927,6 +2966,8 @@ function renderCofrinhoCard(c) {
 
 function openAddCofrinho(id) {
   const c = id ? db.cofrinhos.find(x => x.id === id) : null;
+  const tipo = c?.tipo || 'livre';
+  const mesAtual = new Date().toISOString().substring(0, 7);
   openModal(c?'EDITAR COFRINHO':'NOVO COFRINHO', `
     <div class="form-row">
       <div class="form-group" style="flex:0 0 70px">
@@ -2934,20 +2975,49 @@ function openAddCofrinho(id) {
         <input type="text" class="form-control" id="cfEmoji" value="${c?.emoji||'🐷'}" maxlength="2" style="text-align:center;font-size:1.4rem">
       </div>
       <div class="form-group">
-        <label class="form-label">Nome do Cofrinho</label>
-        <input type="text" class="form-control" id="cfNome" value="${c?.nome||''}" placeholder="Ex: Reserva do bebê, Viagem, Aliança…">
+        <label class="form-label">Nome</label>
+        <input type="text" class="form-control" id="cfNome" value="${c?.nome||''}" placeholder="Ex: Viagem, Reserva, Consórcio…">
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Meta (R$) — opcional</label>
-        <input type="number" step="0.01" class="form-control" id="cfMeta" value="${c?.meta||''}" placeholder="0,00">
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select class="form-control" id="cfTipo" onchange="_toggleCofrinhoTipo()">
+        <option value="livre" ${tipo==='livre'?'selected':''}>🐷 Livre — deposita quando quiser</option>
+        <option value="consorcio" ${tipo==='consorcio'?'selected':''}>📆 Consórcio Pessoal — valor fixo por mês</option>
+      </select>
+    </div>
+    <div id="cfLivreWrap" style="display:${tipo==='livre'?'block':'none'}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Meta (R$) — opcional</label>
+          <input type="number" step="0.01" class="form-control" id="cfMeta" value="${c?.meta||''}" placeholder="0,00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor</label>
+          <select class="form-control" id="cfCor">${COFRINHO_COLORS.map(cor=>`<option value="${cor}" ${(c?.cor||'#00e676')===cor?'selected':''}>${cor}</option>`).join('')}</select>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Cor</label>
-        <select class="form-control" id="cfCor">
-          ${COFRINHO_COLORS.map(cor=>`<option value="${cor}" ${(c?.cor||'#00e676')===cor?'selected':''} style="background:${cor}">${cor}</option>`).join('')}
-        </select>
+    </div>
+    <div id="cfConsorcioWrap" style="display:${tipo==='consorcio'?'block':'none'}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Valor Mensal (R$)</label>
+          <input type="number" step="0.01" class="form-control" id="cfValorMensal" value="${c?.consorcio_valor_mensal||''}" placeholder="500,00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Duração (meses)</label>
+          <input type="number" min="2" max="360" class="form-control" id="cfMeses" value="${c?.consorcio_meses_total||12}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Mês de Início</label>
+          <input type="month" class="form-control" id="cfMesInicio" value="${c?.consorcio_mes_inicio||mesAtual}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor</label>
+          <select class="form-control" id="cfCorC">${COFRINHO_COLORS.map(cor=>`<option value="${cor}" ${(c?.cor||'#40c4ff')===cor?'selected':''}>${cor}</option>`).join('')}</select>
+        </div>
       </div>
     </div>
     <div class="form-group">
@@ -2961,19 +3031,37 @@ function openAddCofrinho(id) {
   `);
 }
 
+function _toggleCofrinhoTipo() {
+  const tipo = document.getElementById('cfTipo')?.value;
+  document.getElementById('cfLivreWrap').style.display = tipo === 'livre' ? 'block' : 'none';
+  document.getElementById('cfConsorcioWrap').style.display = tipo === 'consorcio' ? 'block' : 'none';
+}
+
 function editCofrinho(id) { openAddCofrinho(id); }
 
 function saveCofrinho(id) {
   const emoji = document.getElementById('cfEmoji').value.trim() || '🐷';
   const nome  = document.getElementById('cfNome').value.trim();
-  const meta  = parseFloat(document.getElementById('cfMeta').value) || 0;
-  const cor   = document.getElementById('cfCor').value;
+  const tipo  = document.getElementById('cfTipo')?.value || 'livre';
+  const cor   = (tipo === 'consorcio' ? document.getElementById('cfCorC') : document.getElementById('cfCor'))?.value || '#00e676';
   const descricao = document.getElementById('cfDesc').value.trim();
   if (!nome) return alert('Informe o nome do cofrinho');
-  if (id) {
-    Object.assign(db.cofrinhos.find(x => x.id === id), { emoji, nome, meta, cor, descricao });
+
+  let extra = {};
+  if (tipo === 'consorcio') {
+    const vm = parseFloat(document.getElementById('cfValorMensal')?.value) || 0;
+    const mt = parseInt(document.getElementById('cfMeses')?.value) || 12;
+    const mi = document.getElementById('cfMesInicio')?.value || '';
+    if (!vm || !mi) return alert('Informe o valor mensal e o mês de início.');
+    extra = { consorcio_valor_mensal: vm, consorcio_meses_total: mt, consorcio_mes_inicio: mi, meta: vm * mt };
   } else {
-    db.cofrinhos.push({ id: uid(), emoji, nome, meta, cor, descricao, saldo: 0, movs: [] });
+    extra = { meta: parseFloat(document.getElementById('cfMeta')?.value) || 0 };
+  }
+
+  if (id) {
+    Object.assign(db.cofrinhos.find(x => x.id === id), { emoji, nome, tipo, cor, descricao, ...extra });
+  } else {
+    db.cofrinhos.push({ id: uid(), emoji, nome, tipo, cor, descricao, saldo: 0, movs: [], ...extra });
   }
   closeModal(); saveData(); renderCofrinhos();
 }
@@ -3419,7 +3507,11 @@ function renderCustosTable() {
       const totalDevido = parseFloat(c.valor) + atrasado;
       return `
       <tr>
-        <td>${c.nome}${atrasado > 0 ? `<span style="display:block;font-size:0.68rem;color:var(--red)">⚠️ + R$ ${fmtMoney(atrasado)} atrasado</span>` : ''}</td>
+        <td>${c.nome}
+          ${c.tipo_custo === 'parcelado' ? `<span style="display:block;font-size:0.68rem;color:var(--blue)">📅 Parcela ${(c.parcelas_pagas||0)+1}/${c.parcelas_total||'?'}</span>` : ''}
+          ${c.mes_inicio && new Date().toISOString().substring(0,7) < c.mes_inicio ? `<span style="display:block;font-size:0.68rem;color:var(--text3)">⏳ Início: ${c.mes_inicio}</span>` : ''}
+          ${atrasado > 0 ? `<span style="display:block;font-size:0.68rem;color:var(--red)">⚠️ + R$ ${fmtMoney(atrasado)} atrasado</span>` : ''}
+        </td>
         <td>Dia ${c.dia_vencimento}</td>
         <td class="amount-neg">R$ ${fmtMoney(atrasado > 0 ? totalDevido : c.valor)}${atrasado > 0 ? `<span style="display:block;font-size:0.65rem;color:var(--text3)">Mês: R$ ${fmtMoney(c.valor)}</span>` : ''}</td>
         <td><span class="tag ${c.pago ? 'tag-green' : atrasado > 0 ? 'tag-red' : 'tag-red'}">${c.pago ? 'PAGO' : atrasado > 0 ? 'ATRASADO' : 'PENDENTE'}</span></td>
@@ -3430,33 +3522,116 @@ function renderCustosTable() {
         </td>
       </tr>`;
     }).join('')}</tbody>
-  </table></div>`;
+  </table></div>
+
+  ${_renderProjecaoCustos(perfil)}`;
+}
+
+function _calcCustoMes(mesStr, perfilFiltro) {
+  return db.custos_mensais
+    .filter(c => (c.perfil || 'Eu') === perfilFiltro)
+    .filter(c => {
+      if (c.tipo_custo === 'parcelado' && c.mes_inicio) {
+        if (mesStr < c.mes_inicio) return false;
+        const [y, m] = c.mes_inicio.split('-').map(Number);
+        const pagas = c.parcelas_pagas || 0;
+        const total = c.parcelas_total || 1;
+        const fimDate = new Date(y, m - 1 + total - 1, 1);
+        return new Date(mesStr + '-01') <= fimDate;
+      }
+      return true;
+    })
+    .reduce((a, c) => a + parseFloat(c.valor || 0), 0);
+}
+
+function _renderProjecaoCustos(perfilFiltro) {
+  const hoje = new Date();
+  const meses = Array.from({length: 4}, (_, i) => {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    return d.toISOString().substring(0, 7);
+  });
+  const rows = meses.map((m, i) => {
+    const total = _calcCustoMes(m, perfilFiltro);
+    const label = new Date(m + '-02').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    return `<tr>
+      <td style="color:var(--text2)">${i === 0 ? '📍 ' : ''}${label.charAt(0).toUpperCase() + label.slice(1)}</td>
+      <td style="font-family:var(--font-head);color:var(--orange);text-align:right">R$ ${fmtMoney(total)}</td>
+    </tr>`;
+  }).join('');
+  return `<div style="margin-top:16px;background:var(--bg3);border-radius:var(--radius2);padding:14px">
+    <div style="font-size:0.68rem;letter-spacing:2px;color:var(--text3);margin-bottom:10px">📅 PROJEÇÃO — PRÓXIMOS MESES (${perfilFiltro})</div>
+    <table style="width:100%"><tbody>${rows}</tbody></table>
+  </div>`;
 }
 
 function openAddCusto(id) {
   const c = id ? db.custos_mensais.find(x => x.id === id) : null;
   const perfis = _getPerfis();
   const perfilAtual = c?.perfil || _custosPerfil || 'Eu';
-  const isPrimario = perfilAtual === (perfis[0] || 'Eu');
+  const tipo = c?.tipo_custo || 'fixo';
+  const mesAtual = new Date().toISOString().substring(0, 7);
+  const atrasado = parseFloat(c?.valor_atrasado || 0);
 
   openModal(c ? 'EDITAR CUSTO FIXO' : 'NOVO CUSTO FIXO', `
-    <div class="form-group"><label class="form-label">Nome</label><input type="text" class="form-control" id="cNome" value="${c?.nome || ''}" placeholder="Ex: Aluguel, Netflix..."></div>
+    ${atrasado > 0 ? `
+      <div style="background:rgba(255,82,82,0.08);border:1px solid rgba(255,82,82,0.3);border-radius:var(--radius2);padding:10px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:0.78rem;color:var(--red)">⚠️ Atraso acumulado: <strong>R$ ${fmtMoney(atrasado)}</strong></div>
+        <button class="btn btn-sm" style="border-color:var(--red);color:var(--red);white-space:nowrap" onclick="_limparAtrasoCusto('${c.id}')">🗑️ Limpar Atraso</button>
+      </div>` : ''}
+    <div class="form-group"><label class="form-label">Nome</label>
+      <input type="text" class="form-control" id="cNome" value="${c?.nome || ''}" placeholder="Ex: Carnê Magalu, Netflix...">
+    </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="cValor" value="${c?.valor || ''}"></div>
-      <div class="form-group"><label class="form-label">Dia Vencimento</label><input type="number" min="1" max="31" class="form-control" id="cDia" value="${c?.dia_vencimento || ''}"></div>
+      <div class="form-group"><label class="form-label">Valor por parcela (R$)</label>
+        <input type="number" step="0.01" class="form-control" id="cValor" value="${c?.valor || ''}">
+      </div>
+      <div class="form-group"><label class="form-label">Dia Vencimento</label>
+        <input type="number" min="1" max="31" class="form-control" id="cDia" value="${c?.dia_vencimento || ''}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select class="form-control" id="cTipo" onchange="_toggleCustoTipo()">
+        <option value="fixo" ${tipo==='fixo'?'selected':''}>🔄 Fixo — repete todo mês para sempre</option>
+        <option value="parcelado" ${tipo==='parcelado'?'selected':''}>📅 Parcelado — número de vezes definido</option>
+      </select>
+    </div>
+    <div id="cParcelasWrap" style="display:${tipo==='parcelado'?'block':'none'}">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Total de Parcelas</label>
+          <input type="number" min="2" max="120" class="form-control" id="cParcelas" value="${c?.parcelas_total || 2}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mês da 1ª Parcela</label>
+          <input type="month" class="form-control" id="cMesInicio" value="${c?.mes_inicio || mesAtual}">
+        </div>
+      </div>
+      ${c?.parcelas_pagas ? `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px">✅ ${c.parcelas_pagas} parcela(s) já paga(s)</div>` : ''}
     </div>
     <div class="form-group">
       <label class="form-label">Perfil de gestão</label>
       <select class="form-control" id="cPerfil">
         ${perfis.map(p => `<option value="${p}" ${perfilAtual===p?'selected':''}>${p === perfis[0] ? '👤 '+p+' (minha conta)' : '👥 '+p+' (só anotação)'}</option>`).join('')}
       </select>
-      <div style="font-size:0.7rem;color:var(--text3);margin-top:4px">Perfis secundários não debitam da sua conta — são apenas registros de controle.</div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveCusto('${id || ''}')">Salvar</button>
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
     </div>
   `);
+}
+
+function _toggleCustoTipo() {
+  const tipo = document.getElementById('cTipo')?.value;
+  const wrap = document.getElementById('cParcelasWrap');
+  if (wrap) wrap.style.display = tipo === 'parcelado' ? 'block' : 'none';
+}
+
+function _limparAtrasoCusto(id) {
+  if (!confirm('Limpar o valor atrasado desta conta? O atraso será zerado.')) return;
+  const c = db.custos_mensais.find(x => x.id === id);
+  if (c) { c.valor_atrasado = 0; saveData(); closeModal(); renderCustosTable(); }
 }
 
 function editCusto(id) { openAddCusto(id); }
@@ -3466,9 +3641,17 @@ function saveCusto(id) {
   const valor = parseFloat(document.getElementById('cValor').value);
   const dia = parseInt(document.getElementById('cDia').value);
   const perfil = document.getElementById('cPerfil')?.value || 'Eu';
+  const tipo_custo = document.getElementById('cTipo')?.value || 'fixo';
+  const parcelas_total = tipo_custo === 'parcelado' ? (parseInt(document.getElementById('cParcelas')?.value) || 2) : null;
+  const mes_inicio = tipo_custo === 'parcelado' ? (document.getElementById('cMesInicio')?.value || null) : null;
   if (!nome || !valor || !dia) return alert('Preencha todos os campos');
-  if (id) { Object.assign(db.custos_mensais.find(x => x.id === id), { nome, valor, dia_vencimento: dia, perfil }); }
-  else { db.custos_mensais.push({ id: uid(), nome, valor, dia_vencimento: dia, pago: false, perfil }); }
+  const dados = { nome, valor, dia_vencimento: dia, perfil, tipo_custo, parcelas_total, mes_inicio };
+  if (id) {
+    const c = db.custos_mensais.find(x => x.id === id);
+    Object.assign(c, dados);
+  } else {
+    db.custos_mensais.push({ id: uid(), pago: false, parcelas_pagas: 0, valor_atrasado: 0, ...dados });
+  }
   closeModal(); saveData(); renderCustosTable();
 }
 
