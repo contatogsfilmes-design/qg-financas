@@ -1335,12 +1335,35 @@ function startApp() {
   }
   if (db.dinheiro_fisico === undefined) db.dinheiro_fisico = 0;
   if (!db.cofrinhos) db.cofrinhos = [];
+  _resetCustosMensaisSeNovomes();
   applyTheme(db.settings.theme);
   updateUserProfile();
   navigate('dashboard');
   updateBadges();
   // Verificar se há comprovante compartilhado via PWA share target
   _checkPendingShare();
+}
+
+function _resetCustosMensaisSeNovomes() {
+  const mesAtual = new Date().toISOString().substring(0, 7);
+  const ultimoReset = db.settings.custos_ultimo_reset || '';
+  if (ultimoReset === mesAtual) return; // já resetou este mês
+
+  let alterou = false;
+  db.custos_mensais.forEach(c => {
+    if (c.pago) {
+      // Estava pago no mês anterior → reseta para pendente no novo mês
+      c.pago = false;
+      delete c.valor_atrasado;
+    } else {
+      // Não foi pago no mês anterior → acumula como atrasado
+      c.valor_atrasado = parseFloat(c.valor_atrasado || 0) + parseFloat(c.valor || 0);
+    }
+    alterou = true;
+  });
+
+  db.settings.custos_ultimo_reset = mesAtual;
+  if (alterou) saveData();
 }
 
 // Registrar Service Worker para PWA share target
@@ -1861,7 +1884,7 @@ function _buildMovsList(limit) {
   return limit ? all.slice(0, limit) : all;
 }
 
-function _renderMovsTimeline(movs, showSaldo) {
+function _renderMovsTimeline(movs, showSaldo, openingBalance) {
   if (movs.length === 0) return '<div class="empty-state"><div class="empty-icon">📜</div><div class="empty-text">Nenhuma movimentação registrada</div></div>';
 
   // Group by date
@@ -1880,9 +1903,9 @@ function _renderMovsTimeline(movs, showSaldo) {
       const db2= (b.data||'')+(b.hora||'00:00');
       return da.localeCompare(db2); // oldest first
     });
-    // Start from current total and go backwards isn't reliable.
-    // Instead compute forward from 0 for the filtered set.
-    let running = 0;
+    // Parte do saldo de abertura (saldo_atual - net das movimentações = saldo antes do primeiro lançamento)
+    const _netMovs = allSorted.reduce((a, m) => m._tipo === 'entrada' ? a + parseFloat(m.valor||0) : a - parseFloat(m.valor||0), 0);
+    let running = openingBalance !== undefined ? openingBalance : 0;
     const balanceMap = {};
     allSorted.forEach(m => {
       if (m._tipo === 'entrada') running += parseFloat(m.valor || 0);
@@ -1959,33 +1982,71 @@ function abrirExtratoBanco(bancoId) {
 
   const totalEnt  = movs.filter(m=>m._tipo==='entrada').reduce((a,m)=>a+parseFloat(m.valor||0),0);
   const totalSai  = movs.filter(m=>m._tipo==='gasto').reduce((a,m)=>a+parseFloat(m.valor||0),0);
+  // Saldo de abertura = saldo atual - (entradas - saídas registradas)
+  const openingBal = b.saldo - totalEnt + totalSai;
+  const saldoColor = b.saldo < 0 ? 'var(--red)' : (b.cor || 'var(--green)');
 
   openModal(`🏦 EXTRATO — ${b.nome}`, `
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 16px;flex:1">
-        <div style="font-size:0.68rem;color:var(--text3);letter-spacing:2px">SALDO ATUAL</div>
-        <div style="font-family:var(--font-head);font-size:1.3rem;color:${b.cor||'var(--green)'}">R$ ${fmtMoney(b.saldo)}</div>
-        ${b.finalidade?`<div style="font-size:0.7rem;color:var(--text3)">${b.finalidade}</div>`:''}
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 16px;flex:1;min-width:130px">
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">SALDO ATUAL</div>
+        <div style="font-family:var(--font-head);font-size:1.3rem;color:${saldoColor}">R$ ${fmtMoney(b.saldo)}</div>
+        ${openingBal !== 0 ? `<div style="font-size:0.62rem;color:var(--text3);margin-top:2px">Abertura: R$ ${fmtMoney(openingBal)}</div>` : ''}
       </div>
-      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 16px">
-        <div style="font-size:0.68rem;color:var(--text3)">↑ Entradas</div>
-        <div style="font-family:var(--font-head);color:var(--green)">R$ ${fmtMoney(totalEnt)}</div>
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 12px">
+        <div style="font-size:0.62rem;color:var(--text3)">↑ Entradas</div>
+        <div style="font-family:var(--font-head);color:var(--green);font-size:0.95rem">R$ ${fmtMoney(totalEnt)}</div>
       </div>
-      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 16px">
-        <div style="font-size:0.68rem;color:var(--text3)">↓ Saídas</div>
-        <div style="font-family:var(--font-head);color:var(--red)">R$ ${fmtMoney(totalSai)}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-self:center;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none" onclick="closeModal();quickLancarGasto('${bancoId}')">💸 + Gasto</button>
-        <button class="btn btn-sm" style="background:var(--green);color:#0f1117;border:none" onclick="closeModal();quickLancarEntrada('${bancoId}')">💵 + Entrada</button>
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 12px">
+        <div style="font-size:0.62rem;color:var(--text3)">↓ Saídas</div>
+        <div style="font-family:var(--font-head);color:var(--red);font-size:0.95rem">R$ ${fmtMoney(totalSai)}</div>
       </div>
     </div>
-    <div style="max-height:420px;overflow-y:auto">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none;flex:1" onclick="closeModal();quickLancarGasto('${bancoId}')">💸 + Gasto</button>
+      <button class="btn btn-sm" style="background:var(--green);color:#0f1117;border:none;flex:1" onclick="closeModal();quickLancarEntrada('${bancoId}')">💵 + Entrada</button>
+      <button class="btn btn-sm btn-outline" style="flex:1" onclick="ajustarSaldoBanco('${bancoId}')">⚖️ Ajustar Saldo</button>
+    </div>
+    ${b.saldo < 0 ? `<div style="background:rgba(255,82,82,0.08);border:1px solid rgba(255,82,82,0.3);border-radius:var(--radius2);padding:8px 12px;font-size:0.78rem;color:var(--red);margin-bottom:12px">⚠️ Saldo negativo — use <strong>Ajustar Saldo</strong> para corrigir o saldo de abertura se ele não reflete a realidade.</div>` : ''}
+    <div style="max-height:380px;overflow-y:auto">
       ${movs.length===0
         ? '<div class="empty-state"><div class="empty-text">Nenhuma movimentação nesta conta</div></div>'
-        : _renderMovsTimeline(movs, true)}
+        : _renderMovsTimeline(movs, true, openingBal)}
     </div>
   `, true);
+}
+
+// ─── AJUSTE DE SALDO ─────────────────────────────────────────
+function ajustarSaldoBanco(bancoId) {
+  const b = db.bancos_saldo.find(x => x.id === bancoId);
+  if (!b) return;
+  openModal(`⚖️ AJUSTAR SALDO — ${b.nome}`, `
+    <div style="font-size:0.82rem;color:var(--text2);margin-bottom:14px;background:var(--bg3);padding:10px;border-radius:var(--radius2)">
+      Use quando o saldo calculado não bate com o extrato real do banco.<br>
+      Isso ajusta o <strong>saldo de abertura</strong> sem apagar suas movimentações.
+    </div>
+    <div style="font-size:0.78rem;color:var(--text3);margin-bottom:8px">Saldo atual no app: <strong style="color:${b.saldo<0?'var(--red)':'var(--green)'}">R$ ${fmtMoney(b.saldo)}</strong></div>
+    <div class="form-group">
+      <label class="form-label">Saldo Real (conforme extrato do banco)</label>
+      <input type="number" step="0.01" class="form-control" id="ajSaldo" value="${b.saldo.toFixed(2)}" style="font-family:var(--font-head);font-size:1.1rem;color:var(--green)">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" style="flex:1" onclick="_confirmarAjusteSaldo('${bancoId}')">✅ Confirmar Ajuste</button>
+      <button class="btn btn-outline" onclick="closeModal();abrirExtratoBanco('${bancoId}')">← Cancelar</button>
+    </div>
+  `);
+  setTimeout(() => { const i = document.getElementById('ajSaldo'); if(i){i.focus();i.select();} }, 100);
+}
+
+function _confirmarAjusteSaldo(bancoId) {
+  const b = db.bancos_saldo.find(x => x.id === bancoId);
+  if (!b) return;
+  const novoSaldo = parseFloat(document.getElementById('ajSaldo').value);
+  if (isNaN(novoSaldo)) return alert('Informe um valor válido.');
+  b.saldo = novoSaldo;
+  saveData();
+  closeModal();
+  abrirExtratoBanco(bancoId);
 }
 
 // ─── LANÇAMENTO RÁPIDO POR BANCO ─────────────────────────────
@@ -2046,16 +2107,14 @@ function _saveQuickGasto(bancoId) {
   let forma = 'debito', banco_id = null, nome_banco = '💵 Dinheiro';
   if (formaRaw === 'dinheiro') {
     forma = 'dinheiro';
-    db.dinheiro_fisico = Math.max(0, parseFloat(db.dinheiro_fisico || 0) - valor);
   } else if (formaRaw.startsWith('cred_')) {
     forma = 'credito'; banco_id = formaRaw.slice(5);
-    const bk = db.bancos_saldo.find(b => b.id === banco_id);
-    if (bk) { bk.saldo = parseFloat(bk.saldo || 0) - valor; nome_banco = bk.nome; }
+    nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
   } else {
     forma = 'debito'; banco_id = formaRaw;
-    const bk = db.bancos_saldo.find(b => b.id === banco_id);
-    if (bk) { bk.saldo = parseFloat(bk.saldo || 0) - valor; nome_banco = bk.nome; }
+    nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
   }
+  _debitarConta(formaRaw, banco_id, valor);
 
   const hora = new Date().toTimeString().substring(0, 5);
   db.gastos.push({ id: uid(), data, hora, valor, descricao: desc, tag, forma, banco_id, nome_banco, forma_raw: formaRaw, emprestado: false, pend_id: null, motivo_emprestimo: '' });
@@ -3316,18 +3375,22 @@ function renderCustosTable() {
   const sorted = [...db.custos_mensais].sort((a, b) => a.dia_vencimento - b.dia_vencimento);
   document.getElementById('custosTable').innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Nome</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead>
-    <tbody>${sorted.map(c => `
+    <tbody>${sorted.map(c => {
+      const atrasado = parseFloat(c.valor_atrasado || 0);
+      const totalDevido = parseFloat(c.valor) + atrasado;
+      return `
       <tr>
-        <td>${c.nome}</td>
+        <td>${c.nome}${atrasado > 0 ? `<span style="display:block;font-size:0.68rem;color:var(--red)">⚠️ + R$ ${fmtMoney(atrasado)} atrasado</span>` : ''}</td>
         <td>Dia ${c.dia_vencimento}</td>
-        <td class="amount-neg">R$ ${fmtMoney(c.valor)}</td>
-        <td><span class="tag ${c.pago ? 'tag-green' : 'tag-red'}">${c.pago ? 'PAGO' : 'PENDENTE'}</span></td>
+        <td class="amount-neg">R$ ${fmtMoney(atrasado > 0 ? totalDevido : c.valor)}${atrasado > 0 ? `<span style="display:block;font-size:0.65rem;color:var(--text3)">Mês: R$ ${fmtMoney(c.valor)}</span>` : ''}</td>
+        <td><span class="tag ${c.pago ? 'tag-green' : atrasado > 0 ? 'tag-red' : 'tag-red'}">${c.pago ? 'PAGO' : atrasado > 0 ? 'ATRASADO' : 'PENDENTE'}</span></td>
         <td style="white-space:nowrap">
           <button class="btn-icon" onclick="toggleCusto('${c.id}')" title="${c.pago ? 'Marcar como pendente' : 'Marcar como pago'}">${c.pago ? '↩️' : '✅'}</button>
           <button class="btn-icon" onclick="editCusto('${c.id}')">✏️</button>
           <button class="btn-icon" onclick="deleteCusto('${c.id}')">🗑️</button>
         </td>
-      </tr>`).join('')}</tbody>
+      </tr>`;
+    }).join('')}</tbody>
   </table></div>`;
 }
 
