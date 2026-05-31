@@ -3347,11 +3347,29 @@ function removeTagGasto(tag) {
 // ============================================================
 // CUSTOS MENSAIS
 // ============================================================
+let _custosPerfil = 'Eu'; // perfil ativo na tab
+
+function _getPerfis() {
+  if (!db.settings.custos_perfis?.length) db.settings.custos_perfis = ['Eu'];
+  return db.settings.custos_perfis;
+}
+
 function renderCustos() {
+  const perfis = _getPerfis();
+  const tabsHtml = perfis.map(p => `
+    <button onclick="_setCustosPerfil('${p}')" id="tabCusto_${p.replace(/\s/g,'_')}"
+      style="padding:7px 16px;border:none;border-bottom:2px solid ${_custosPerfil===p?'var(--green)':'transparent'};
+             background:none;color:${_custosPerfil===p?'var(--green)':'var(--text2)'};
+             cursor:pointer;font-family:var(--font-body);font-size:0.88rem;font-weight:600;transition:all .2s">
+      ${p === 'Eu' ? '👤' : '👥'} ${p}
+    </button>`).join('');
+
   document.getElementById('contentArea').innerHTML = `
-    <div class="section-header">
-      <div></div>
-      <button class="btn btn-primary" onclick="openAddCusto()">+ Novo Custo Fixo</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border2)">${tabsHtml}
+        <button onclick="_addCustosPerfil()" style="padding:7px 12px;border:none;background:none;color:var(--text3);cursor:pointer;font-size:0.82rem" title="Novo perfil">+ Perfil</button>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openAddCusto()">+ Novo Custo</button>
     </div>
     <div class="stat-grid" id="custosStats"></div>
     <div class="card" id="custosTable"></div>
@@ -3359,20 +3377,41 @@ function renderCustos() {
   renderCustosTable();
 }
 
+function _setCustosPerfil(p) {
+  _custosPerfil = p;
+  renderCustos();
+}
+
+function _addCustosPerfil() {
+  const nome = prompt('Nome do novo perfil (ex: Mãe, Pai, Casa):');
+  if (!nome?.trim()) return;
+  const perfis = _getPerfis();
+  if (perfis.includes(nome.trim())) return alert('Perfil já existe.');
+  perfis.push(nome.trim());
+  db.settings.custos_perfis = perfis;
+  _custosPerfil = nome.trim();
+  saveData();
+  renderCustos();
+}
+
 function renderCustosTable() {
-  const total = db.custos_mensais.reduce((a, c) => a + parseFloat(c.valor || 0), 0);
-  const pagos = db.custos_mensais.filter(c => c.pago).reduce((a, c) => a + parseFloat(c.valor || 0), 0);
+  const perfil = _custosPerfil;
+  const todos = db.custos_mensais.filter(c => (c.perfil || 'Eu') === perfil);
+  const total = todos.reduce((a, c) => a + parseFloat(c.valor || 0) + parseFloat(c.valor_atrasado || 0), 0);
+  const pagos = todos.filter(c => c.pago).reduce((a, c) => a + parseFloat(c.valor || 0), 0);
+  const isPrimario = perfil === (_getPerfis()[0] || 'Eu');
+
   document.getElementById('custosStats').innerHTML = `
-    <div class="stat-card orange"><div class="stat-value">R$ ${fmtMoney(total)}</div><div class="stat-label">TOTAL MENSAL</div></div>
+    <div class="stat-card orange"><div class="stat-value">R$ ${fmtMoney(total)}</div><div class="stat-label">TOTAL — ${perfil.toUpperCase()}</div></div>
     <div class="stat-card"><div class="stat-value">R$ ${fmtMoney(pagos)}</div><div class="stat-label">PAGO ESTE MÊS</div></div>
     <div class="stat-card red"><div class="stat-value">R$ ${fmtMoney(total - pagos)}</div><div class="stat-label">A PAGAR</div></div>
-    <div class="stat-card"><div class="stat-value">${db.custos_mensais.length}</div><div class="stat-label">CONTAS FIXAS</div></div>
+    <div class="stat-card"><div class="stat-value">${todos.length}</div><div class="stat-label">CONTAS DE ${perfil.toUpperCase()}</div></div>
   `;
-  if (db.custos_mensais.length === 0) {
-    document.getElementById('custosTable').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Nenhum custo fixo cadastrado</div></div>';
+  if (todos.length === 0) {
+    document.getElementById('custosTable').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Nenhum custo fixo para ${perfil}</div><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openAddCusto()">+ Adicionar custo de ${perfil}</button></div>`;
     return;
   }
-  const sorted = [...db.custos_mensais].sort((a, b) => a.dia_vencimento - b.dia_vencimento);
+  const sorted = [...todos].sort((a, b) => a.dia_vencimento - b.dia_vencimento);
   document.getElementById('custosTable').innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Nome</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead>
     <tbody>${sorted.map(c => {
@@ -3396,11 +3435,22 @@ function renderCustosTable() {
 
 function openAddCusto(id) {
   const c = id ? db.custos_mensais.find(x => x.id === id) : null;
+  const perfis = _getPerfis();
+  const perfilAtual = c?.perfil || _custosPerfil || 'Eu';
+  const isPrimario = perfilAtual === (perfis[0] || 'Eu');
+
   openModal(c ? 'EDITAR CUSTO FIXO' : 'NOVO CUSTO FIXO', `
     <div class="form-group"><label class="form-label">Nome</label><input type="text" class="form-control" id="cNome" value="${c?.nome || ''}" placeholder="Ex: Aluguel, Netflix..."></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="cValor" value="${c?.valor || ''}"></div>
       <div class="form-group"><label class="form-label">Dia Vencimento</label><input type="number" min="1" max="31" class="form-control" id="cDia" value="${c?.dia_vencimento || ''}"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Perfil de gestão</label>
+      <select class="form-control" id="cPerfil">
+        ${perfis.map(p => `<option value="${p}" ${perfilAtual===p?'selected':''}>${p === perfis[0] ? '👤 '+p+' (minha conta)' : '👥 '+p+' (só anotação)'}</option>`).join('')}
+      </select>
+      <div style="font-size:0.7rem;color:var(--text3);margin-top:4px">Perfis secundários não debitam da sua conta — são apenas registros de controle.</div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveCusto('${id || ''}')">Salvar</button>
@@ -3415,17 +3465,21 @@ function saveCusto(id) {
   const nome = document.getElementById('cNome').value.trim();
   const valor = parseFloat(document.getElementById('cValor').value);
   const dia = parseInt(document.getElementById('cDia').value);
+  const perfil = document.getElementById('cPerfil')?.value || 'Eu';
   if (!nome || !valor || !dia) return alert('Preencha todos os campos');
-  if (id) { Object.assign(db.custos_mensais.find(x => x.id === id), { nome, valor, dia_vencimento: dia }); }
-  else { db.custos_mensais.push({ id: uid(), nome, valor, dia_vencimento: dia, pago: false }); }
+  if (id) { Object.assign(db.custos_mensais.find(x => x.id === id), { nome, valor, dia_vencimento: dia, perfil }); }
+  else { db.custos_mensais.push({ id: uid(), nome, valor, dia_vencimento: dia, pago: false, perfil }); }
   closeModal(); saveData(); renderCustosTable();
 }
 
 function toggleCusto(id) {
   const c = db.custos_mensais.find(x => x.id === id);
+  const perfis = _getPerfis();
+  const isPrimario = (c.perfil || 'Eu') === (perfis[0] || 'Eu');
+
   if (c.pago) {
-    // Undo — revert linked gasto
-    if (c.gasto_id) {
+    // Desfazer pagamento
+    if (isPrimario && c.gasto_id) {
       const g = db.gastos.find(x => x.id === c.gasto_id);
       if (g) {
         if (g.banco_id) {
@@ -3438,30 +3492,63 @@ function toggleCusto(id) {
     }
     c.pago = false;
     saveData(); renderCustosTable();
-  } else {
-    // Show payment modal
-    openModal(`✅ PAGAR CONTA — ${c.nome}`, `
-      <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px">
-        Valor: <strong style="color:var(--orange)">R$ ${fmtMoney(c.valor)}</strong>
+    return;
+  }
+
+  if (!isPrimario) {
+    // Perfil secundário (ex: Mãe) — só check, sem débito em banco
+    openModal(`✅ MARCAR COMO PAGO — ${c.nome}`, `
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:12px;margin-bottom:14px">
+        <div style="font-size:0.72rem;color:var(--text3);letter-spacing:2px">PERFIL: ${c.perfil || 'Eu'}</div>
+        <div style="font-size:0.82rem;color:var(--text2);margin-top:4px">Este custo <strong>não será debitado</strong> da sua conta — apenas marcado como pago no controle.</div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Data do Pagamento</label>
-          <input type="date" class="form-control" id="cpData" value="${today()}">
-        </div>
-        <div class="form-group"><label class="form-label">Valor Pago (R$)</label>
-          <input type="number" step="0.01" class="form-control" id="cpValor" value="${c.valor}">
-        </div>
+      <div class="form-group">
+        <label class="form-label">Data do Pagamento</label>
+        <input type="date" class="form-control" id="cpData" value="${today()}">
       </div>
-      ${_formaGastoHtml('cp')}
-      <div style="background:rgba(255,152,0,0.06);border:1px solid var(--orange);border-radius:var(--radius2);padding:10px;margin-top:10px;font-size:0.78rem;color:var(--text2)">
-        💡 O valor será lançado automaticamente como <strong>gasto</strong> e debitado da conta selecionada.
+      <div class="form-group">
+        <label class="form-label">Observação (opcional)</label>
+        <input type="text" class="form-control" id="cpObs" placeholder="Ex: Ela pagou em dinheiro...">
       </div>
       <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="btn btn-primary" onclick="_confirmarPagCusto('${id}')">✅ Confirmar Pagamento</button>
+        <button class="btn btn-primary" style="flex:1" onclick="_confirmarPagCustoSimples('${id}')">✅ Marcar como Pago</button>
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       </div>
     `);
+    return;
   }
+
+  // Perfil primário — fluxo normal com débito no banco
+  openModal(`✅ PAGAR CONTA — ${c.nome}`, `
+    <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px">
+      Valor: <strong style="color:var(--orange)">R$ ${fmtMoney(c.valor)}</strong>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Data do Pagamento</label>
+        <input type="date" class="form-control" id="cpData" value="${today()}">
+      </div>
+      <div class="form-group"><label class="form-label">Valor Pago (R$)</label>
+        <input type="number" step="0.01" class="form-control" id="cpValor" value="${c.valor}">
+      </div>
+    </div>
+    ${_formaGastoHtml('cp')}
+    <div style="background:rgba(255,152,0,0.06);border:1px solid var(--orange);border-radius:var(--radius2);padding:10px;margin-top:10px;font-size:0.78rem;color:var(--text2)">
+      💡 O valor será lançado como <strong>gasto</strong> e debitado da conta selecionada.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="_confirmarPagCusto('${id}')">✅ Confirmar Pagamento</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+}
+
+function _confirmarPagCustoSimples(id) {
+  const c = db.custos_mensais.find(x => x.id === id);
+  const data = document.getElementById('cpData').value;
+  c.pago = true;
+  c.data_pago = data;
+  if (c.valor_atrasado) c.valor_atrasado = 0;
+  closeModal(); saveData(); renderCustosTable();
 }
 
 function _confirmarPagCusto(id) {
