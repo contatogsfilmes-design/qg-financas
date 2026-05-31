@@ -628,6 +628,37 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
 }
 
 /* ============================================================
+   MOBILE QUICK ENTRY
+   ============================================================ */
+.mq-tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:20px; }
+.mq-tab { flex:1; padding:14px; text-align:center; font-family:var(--font-head); font-size:0.82rem;
+  letter-spacing:1px; border:none; background:none; cursor:pointer; color:var(--text2);
+  border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .2s; }
+.mq-tab.active-gasto { color:var(--red); border-bottom-color:var(--red); }
+.mq-tab.active-entrada { color:var(--green); border-bottom-color:var(--green); }
+.mq-valor-wrap { position:relative; margin-bottom:20px; }
+.mq-valor-prefix { position:absolute; left:16px; top:50%; transform:translateY(-50%);
+  font-family:var(--font-head); font-size:1.1rem; color:var(--text3); }
+#mqValor { width:100%; padding:18px 18px 18px 56px; font-family:var(--font-head);
+  font-size:2rem; background:var(--bg3); border:2px solid var(--border); border-radius:var(--radius);
+  color:var(--text); outline:none; transition:border-color .2s; box-sizing:border-box; }
+#mqValor:focus { border-color:var(--green); }
+#mqValor.modo-gasto:focus { border-color:var(--red); }
+.mq-banco-grid { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+.mq-banco-btn { padding:10px 14px; border-radius:var(--radius2); border:2px solid var(--border);
+  background:var(--bg3); color:var(--text2); font-family:var(--font-body); font-size:0.85rem;
+  cursor:pointer; transition:all .2s; flex:1; min-width:80px; text-align:center; }
+.mq-banco-btn.selected-gasto { border-color:var(--red); background:rgba(255,82,82,0.1); color:var(--red); font-weight:700; }
+.mq-banco-btn.selected-entrada { border-color:var(--green); background:var(--green-glow); color:var(--green); font-weight:700; }
+.mq-submit { width:100%; padding:18px; font-family:var(--font-head); font-size:1rem; letter-spacing:2px;
+  border:none; border-radius:var(--radius); cursor:pointer; font-weight:900; transition:all .2s; margin-top:8px; }
+.mq-submit-gasto { background:var(--red); color:#fff; }
+.mq-submit-entrada { background:var(--green); color:#0f1117; }
+.mq-recentes { margin-top:24px; }
+.mq-recente-item { display:flex; justify-content:space-between; align-items:center;
+  padding:10px 0; border-bottom:1px solid var(--border2); font-size:0.82rem; }
+
+/* ============================================================
    JULIUS — CONSULTOR FINANCEIRO PESSOAL
    ============================================================ */
 #julius-fab {
@@ -874,6 +905,7 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
     </div>
     <div class="sidebar-nav">
       <div class="nav-group-label">Principal</div>
+      <div class="nav-item" onclick="navigate('mobile-quick')" data-page="mobile-quick" style="display:none" id="navMobileQuick"><span class="ni">⚡</span> Lançamento Rápido</div>
       <div class="nav-item active" onclick="navigate('dashboard')" data-page="dashboard"><span class="ni">📊</span> Dashboard</div>
       <div class="nav-item" onclick="navigate('extrato')" data-page="extrato"><span class="ni">📜</span> Extrato Completo</div>
       <div class="nav-item" onclick="navigate('entradas')" data-page="entradas"><span class="ni">💵</span> Entradas de Caixa</div>
@@ -1338,7 +1370,7 @@ function startApp() {
   _resetCustosMensaisSeNovomes();
   applyTheme(db.settings.theme);
   updateUserProfile();
-  navigate('dashboard');
+  navigate(window.innerWidth <= 760 ? 'mobile-quick' : 'dashboard');
   updateBadges();
   // Verificar se há comprovante compartilhado via PWA share target
   _checkPendingShare();
@@ -1457,6 +1489,7 @@ function updateBadges() {
 // NAVIGATION
 // ============================================================
 const pageTitles = {
+  'mobile-quick': 'QG MOBILE',
   dashboard: 'DASHBOARD', extrato: 'EXTRATO COMPLETO', entradas: 'ENTRADAS DE CAIXA', gastos: 'GASTOS', custos: 'CUSTOS MENSAIS',
   cofrinhos: 'COFRINHOS & RESERVAS', cartoes: 'CARTÕES & BANCOS', evolucao: 'EVOLUÇÃO PESSOAL',
   investimentos: 'INVESTIMENTOS', pendencias: 'PENDÊNCIAS FINANCEIRAS',
@@ -1471,7 +1504,7 @@ function navigate(page) {
   destroyCharts();
   const ca = document.getElementById('contentArea');
   ca.innerHTML = '';
-  const renderers = { dashboard: renderDashboard, extrato: renderExtrato, entradas: renderEntradas, gastos: renderGastos, cofrinhos: renderCofrinhos, cartoes: renderCartoes, custos: renderCustos, investimentos: renderInvestimentos, pendencias: renderPendencias, relatorio: renderRelatorio, notificacoes: renderNotificacoes, receber: renderReceber, clientes: renderClientes, feedback: renderFeedback, settings: renderSettings, evolucao: renderEvolucao };
+  const renderers = { 'mobile-quick': renderMobileQuick, dashboard: renderDashboard, extrato: renderExtrato, entradas: renderEntradas, gastos: renderGastos, cofrinhos: renderCofrinhos, cartoes: renderCartoes, custos: renderCustos, investimentos: renderInvestimentos, pendencias: renderPendencias, relatorio: renderRelatorio, notificacoes: renderNotificacoes, receber: renderReceber, clientes: renderClientes, feedback: renderFeedback, settings: renderSettings, evolucao: renderEvolucao };
   if (renderers[page]) renderers[page]();
   closeSidebar();
   window.scrollTo(0, 0);
@@ -1648,6 +1681,175 @@ function calcSaldoReal() {
   // Saldo real = total em bancos (que já incorporou todas as entradas) - total de gastos registrados
   // Para usuários novos: entradas - gastos
   return calcRecebidosBruto() - calcGastosBruto();
+}
+
+// ============================================================
+// MOBILE QUICK ENTRY
+// ============================================================
+let _mqModo = 'gasto'; // 'gasto' | 'entrada'
+let _mqBanco = null;   // id do banco selecionado ou 'dinheiro'
+
+function renderMobileQuick() {
+  // Mostra o nav item só no mobile
+  const navItem = document.getElementById('navMobileQuick');
+  if (navItem) navItem.style.display = '';
+
+  const saldo = calcTotalCaixa();
+  const mesAtual = new Date().toISOString().substring(0, 7);
+  const gastosHoje = db.gastos.filter(g => g.data === today()).reduce((a,g) => a + parseFloat(g.valor||0), 0);
+
+  // Seta banco padrão se não tiver
+  if (!_mqBanco) {
+    const primeiro = db.bancos_saldo.find(b => b.tipo !== 'credito');
+    _mqBanco = primeiro?.id || 'dinheiro';
+  }
+
+  const bancosBtns = [
+    { id: 'dinheiro', label: '💵 Dinheiro' },
+    ...db.bancos_saldo.filter(b => b.tipo !== 'credito').map(b => ({ id: b.id, label: b.nome })),
+    ...db.bancos_saldo.filter(b => b.tipo === 'credito').map(b => ({ id: 'cred_' + b.id, label: '💳 ' + b.nome }))
+  ].map(b => {
+    const sel = _mqBanco === b.id;
+    const cls = sel ? (_mqModo === 'gasto' ? 'selected-gasto' : 'selected-entrada') : '';
+    return `<button class="mq-banco-btn ${cls}" onclick="_mqSelecionaBanco('${b.id}')">${b.label}</button>`;
+  }).join('');
+
+  // Últimas 5 movimentações
+  const recentes = [
+    ...db.entradas_caixa.map(e => ({ ...e, _tipo: 'entrada' })),
+    ...db.gastos.filter(g => !g.emprestado).map(g => ({ ...g, _tipo: 'gasto' }))
+  ].sort((a,b) => ((b.data||'')+(b.hora||'00:00')).localeCompare((a.data||'')+(a.hora||'00:00'))).slice(0, 5);
+
+  const recentesHtml = recentes.length === 0 ? '<div style="color:var(--text3);font-size:0.8rem;padding:8px 0">Nenhum lançamento ainda</div>' :
+    recentes.map(m => `
+      <div class="mq-recente-item">
+        <div>
+          <span style="color:${m._tipo==='entrada'?'var(--green)':'var(--red)'}">
+            ${m._tipo==='entrada'?'↑':'↓'}
+          </span>
+          <span style="color:var(--text);margin-left:6px">${m.descricao||m.nome||'—'}</span>
+          <span style="color:var(--text3);font-size:0.72rem;display:block;margin-left:18px">${m.nome_banco||'—'} · ${m.data||''}</span>
+        </div>
+        <span style="font-family:var(--font-head);color:${m._tipo==='entrada'?'var(--green)':'var(--red)'}">
+          ${m._tipo==='entrada'?'+':'−'} R$ ${fmtMoney(m.valor)}
+        </span>
+      </div>`).join('');
+
+  document.getElementById('contentArea').innerHTML = `
+    <div style="max-width:500px;margin:0 auto">
+
+      <!-- Saldo rápido -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--bg3);border-radius:var(--radius2)">
+        <div>
+          <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">CAIXA TOTAL</div>
+          <div style="font-family:var(--font-head);font-size:1.3rem;color:var(--green)">R$ ${fmtMoney(saldo)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">GASTEI HOJE</div>
+          <div style="font-family:var(--font-head);font-size:1rem;color:var(--red)">R$ ${fmtMoney(gastosHoje)}</div>
+        </div>
+      </div>
+
+      <!-- Tabs Gasto / Entrada -->
+      <div class="mq-tabs">
+        <button class="mq-tab ${_mqModo==='gasto'?'active-gasto':''}" onclick="_mqSetModo('gasto')">💸 GASTO</button>
+        <button class="mq-tab ${_mqModo==='entrada'?'active-entrada':''}" onclick="_mqSetModo('entrada')">💵 ENTRADA</button>
+      </div>
+
+      <!-- Valor -->
+      <div class="mq-valor-wrap">
+        <span class="mq-valor-prefix">R$</span>
+        <input type="number" step="0.01" id="mqValor" class="${_mqModo==='gasto'?'modo-gasto':''}"
+          placeholder="0,00" inputmode="decimal"
+          onkeydown="if(event.key==='Enter'){_mqLancar();event.preventDefault()}">
+      </div>
+
+      <!-- Descrição -->
+      <div style="margin-bottom:16px">
+        <input type="text" id="mqDesc" class="form-control" placeholder="${_mqModo==='gasto'?'Onde gastou? Ex: Mercado, Uber…':'De onde veio? Ex: Cliente, Freela…'}"
+          style="font-size:1rem;padding:14px;"
+          onkeydown="if(event.key==='Enter'){_mqLancar();event.preventDefault()}">
+      </div>
+
+      <!-- Data (compacto) -->
+      <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px">
+        <label style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;white-space:nowrap">DATA</label>
+        <input type="date" id="mqData" class="form-control" value="${today()}" style="flex:1">
+      </div>
+
+      <!-- Banco -->
+      <div style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;margin-bottom:8px">${_mqModo==='gasto'?'PAGO COM':'ENTROU EM'}</div>
+      <div class="mq-banco-grid">${bancosBtns}</div>
+
+      <!-- Botão -->
+      <button class="mq-submit ${_mqModo==='gasto'?'mq-submit-gasto':'mq-submit-entrada'}" onclick="_mqLancar()">
+        ${_mqModo==='gasto'?'💸 LANÇAR GASTO':'💵 REGISTRAR ENTRADA'}
+      </button>
+
+      <!-- Recentes -->
+      <div class="mq-recentes">
+        <div style="font-size:0.65rem;color:var(--text3);letter-spacing:2px;margin-bottom:8px">LANÇAMENTOS RECENTES</div>
+        ${recentesHtml}
+      </div>
+    </div>
+  `;
+
+  setTimeout(() => document.getElementById('mqValor')?.focus(), 100);
+}
+
+function _mqSetModo(modo) {
+  _mqModo = modo;
+  renderMobileQuick();
+}
+
+function _mqSelecionaBanco(id) {
+  _mqBanco = id;
+  // Atualiza visual sem re-renderizar tudo
+  document.querySelectorAll('.mq-banco-btn').forEach(btn => {
+    btn.className = 'mq-banco-btn';
+    if (btn.getAttribute('onclick').includes(`'${id}'`)) {
+      btn.classList.add(_mqModo === 'gasto' ? 'selected-gasto' : 'selected-entrada');
+    }
+  });
+}
+
+function _mqLancar() {
+  const valor = parseFloat(document.getElementById('mqValor')?.value);
+  const desc  = document.getElementById('mqDesc')?.value.trim();
+  const data  = document.getElementById('mqData')?.value || today();
+  if (!valor || valor <= 0) { document.getElementById('mqValor')?.focus(); return; }
+  if (!desc) { document.getElementById('mqDesc')?.focus(); return; }
+
+  const hora = new Date().toTimeString().substring(0, 5);
+
+  if (_mqModo === 'gasto') {
+    const formaRaw = _mqBanco;
+    let forma = 'debito', banco_id = null, nome_banco = '💵 Dinheiro';
+    if (formaRaw === 'dinheiro') { forma = 'dinheiro'; }
+    else if (formaRaw?.startsWith('cred_')) {
+      forma = 'credito'; banco_id = formaRaw.slice(5);
+      nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
+    } else {
+      forma = 'debito'; banco_id = formaRaw;
+      nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
+    }
+    _debitarConta(formaRaw, banco_id, valor);
+    db.gastos.push({ id: uid(), data, hora, valor, descricao: desc, tag: '', forma, banco_id, nome_banco, forma_raw: formaRaw, emprestado: false, pend_id: null, motivo_emprestimo: '' });
+  } else {
+    _persistEntrada({ data, hora, valor, descricao: desc, categoria: 'Recebimento', forma: 'PIX', bancoId: _mqBanco === 'dinheiro' ? 'dinheiro' : _mqBanco, obs: '' });
+  }
+
+  saveData(); updateBadges();
+
+  // Feedback visual rápido e limpa o form
+  const btn = document.querySelector('.mq-submit');
+  if (btn) { btn.textContent = '✅ Lançado!'; btn.style.opacity = '0.7'; }
+  document.getElementById('mqValor').value = '';
+  document.getElementById('mqDesc').value = '';
+  setTimeout(() => {
+    renderMobileQuick();
+    document.getElementById('mqValor')?.focus();
+  }, 600);
 }
 
 function renderDashboard() {
