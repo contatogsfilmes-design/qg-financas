@@ -947,6 +947,7 @@ tbody td { padding:10px 14px; font-size:0.88rem; color:var(--text); }
       <div class="page-title" id="pageTitle">DASHBOARD</div>
       <div class="topbar-actions">
         <span style="font-size:0.75rem;color:var(--text3)" id="lastSaved"></span>
+        <button class="notif-btn" id="btnPrivacidade" onclick="togglePrivacidade()" title="Ocultar/mostrar valores">👁</button>
         <button class="notif-btn" onclick="toggleNotifPanel()" title="Notificações">🔔<span class="notif-dot" id="notifDot" style="display:none"></span></button>
       </div>
     </div>
@@ -1528,6 +1529,14 @@ function closeSidebar() {
   document.getElementById('sidebarBackdrop')?.classList.remove('open');
 }
 
+function togglePrivacidade() {
+  _privacidadeAtiva = !_privacidadeAtiva;
+  const btn = document.getElementById('btnPrivacidade');
+  if (btn) btn.textContent = _privacidadeAtiva ? '🙈' : '👁';
+  // Re-renderiza a página atual para aplicar/remover censura
+  navigate(currentPage);
+}
+
 // Fecha sidebar quando aperta ESC
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeSidebar();
@@ -1618,7 +1627,9 @@ function renderNotifPanel() {
 // UTILS
 // ============================================================
 const uid = () => Math.random().toString(36).substring(2, 10);
-const fmtMoney = v => parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let _privacidadeAtiva = false;
+const _fmtMoneyReal = v => parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtMoney = v => _privacidadeAtiva ? '•••,••' : _fmtMoneyReal(v);
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '';
 const today = () => new Date().toISOString().split('T')[0];
 const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
