@@ -3763,32 +3763,76 @@ function _calcCustoMes(mesStr, perfilFiltro) {
     .reduce((a, c) => a + parseFloat(c.valor || 0), 0);
 }
 
+function _calcReceitaFixaMensal() {
+  return db.clientes
+    .filter(c => (c.tipo_cobranca || 'mensal') === 'mensal')
+    .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0);
+}
+
 function _renderProjecaoCustos(perfilFiltro) {
   const hoje = new Date();
   const meses = Array.from({length: 12}, (_, i) => {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
     return d.toISOString().substring(0, 7);
   });
-  const totalAnual = meses.reduce((a, m) => a + _calcCustoMes(m, perfilFiltro), 0);
+
+  const receita = _calcReceitaFixaMensal();
+  const isPrimario = perfilFiltro === (_getPerfis()[0] || 'Eu');
+
+  const totalCustosAnual = meses.reduce((a, m) => a + _calcCustoMes(m, perfilFiltro), 0);
+  const totalLiquidoAnual = isPrimario ? (receita * 12) - totalCustosAnual : null;
+
   const rows = meses.map((m, i) => {
-    const total = _calcCustoMes(m, perfilFiltro);
+    const custo = _calcCustoMes(m, perfilFiltro);
+    const liquido = isPrimario ? receita - custo : null;
     const label = new Date(m + '-02').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const labelFmt = label.charAt(0).toUpperCase() + label.slice(1);
+    const liquidoHtml = liquido !== null
+      ? `<td style="font-family:var(--font-head);text-align:right;padding:8px 6px;color:${liquido>=0?'var(--green)':'var(--red)'};white-space:nowrap">
+          ${liquido >= 0 ? '+' : '−'} R$ ${fmtMoney(Math.abs(liquido))}
+         </td>`
+      : '';
     return `<tr onclick="_abrirDetalheProjecao('${m}','${perfilFiltro}')" style="cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''">
       <td style="color:${i===0?'var(--green)':'var(--text2)'};padding:8px 6px">
         ${i === 0 ? '📍 ' : ''}<strong>${labelFmt}</strong>
       </td>
-      <td style="font-family:var(--font-head);color:var(--orange);text-align:right;padding:8px 6px">R$ ${fmtMoney(total)}</td>
-      <td style="padding:8px 6px;text-align:right;color:var(--text3);font-size:0.78rem">👁 ver</td>
+      <td style="font-family:var(--font-head);color:var(--orange);text-align:right;padding:8px 6px;white-space:nowrap">R$ ${fmtMoney(custo)}</td>
+      ${liquidoHtml}
+      <td style="padding:8px 6px;text-align:right;color:var(--text3);font-size:0.78rem">👁</td>
     </tr>`;
   }).join('');
 
+  const headerReceita = isPrimario
+    ? `<th style="text-align:right;font-size:0.65rem;color:var(--text3);letter-spacing:1px;padding:4px 6px">LÍQUIDO</th>`
+    : '';
+  const receitaInfo = isPrimario
+    ? `<div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px">
+        💵 Receita fixa mensal (clientes): <strong style="color:var(--green)">R$ ${fmtMoney(receita)}</strong>
+        ${receita === 0 ? ' <span style="color:var(--text3);font-size:0.7rem">(nenhum cliente mensal cadastrado)</span>' : ''}
+       </div>`
+    : '';
+  const totalLiquidoHtml = totalLiquidoAnual !== null
+    ? `<span style="margin-left:16px">Líquido anual: <strong style="font-family:var(--font-head);color:${totalLiquidoAnual>=0?'var(--green)':'var(--red)'}">
+        ${totalLiquidoAnual>=0?'+':'−'} R$ ${fmtMoney(Math.abs(totalLiquidoAnual))}
+       </strong></span>`
+    : '';
+
   return `<div style="margin-top:16px;background:var(--bg3);border-radius:var(--radius2);padding:14px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div style="font-size:0.68rem;letter-spacing:2px;color:var(--text3)">📅 PROJEÇÃO ANUAL — ${perfilFiltro.toUpperCase()}</div>
-      <div style="font-size:0.78rem;color:var(--text2)">Total 12 meses: <strong style="font-family:var(--font-head);color:var(--orange)">R$ ${fmtMoney(totalAnual)}</strong></div>
+    <div style="font-size:0.68rem;letter-spacing:2px;color:var(--text3);margin-bottom:8px">📅 PROJEÇÃO ANUAL — ${perfilFiltro.toUpperCase()}</div>
+    ${receitaInfo}
+    <div style="font-size:0.78rem;color:var(--text2);margin-bottom:10px;flex-wrap:wrap;display:flex;gap:8px">
+      <span>Custos 12 meses: <strong style="font-family:var(--font-head);color:var(--orange)">R$ ${fmtMoney(totalCustosAnual)}</strong></span>
+      ${totalLiquidoHtml}
     </div>
-    <table style="width:100%"><tbody>${rows}</tbody></table>
+    <table style="width:100%">
+      <thead><tr>
+        <th style="text-align:left;font-size:0.65rem;color:var(--text3);letter-spacing:1px;padding:4px 6px">MÊS</th>
+        <th style="text-align:right;font-size:0.65rem;color:var(--text3);letter-spacing:1px;padding:4px 6px">CUSTOS</th>
+        ${headerReceita}
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
     <div style="font-size:0.7rem;color:var(--text3);margin-top:8px">👆 Clique em qualquer mês para ver o detalhamento</div>
   </div>`;
 }
@@ -3825,10 +3869,27 @@ function _abrirDetalheProjecao(mesStr, perfilFiltro) {
     </tr>`;
   }).join('');
 
+  const isPrimario = perfilFiltro === (_getPerfis()[0] || 'Eu');
+  const receita = isPrimario ? _calcReceitaFixaMensal() : 0;
+  const liquido = isPrimario ? receita - total : null;
+
   openModal(`📅 ${labelFmt} — ${perfilFiltro}`, `
-    <div style="background:var(--bg3);border-radius:var(--radius2);padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:0.72rem;color:var(--text3);letter-spacing:2px">TOTAL DO MÊS</div>
-      <div style="font-family:var(--font-head);font-size:1.4rem;color:var(--orange)">R$ ${fmtMoney(total)}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 14px;flex:1">
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">CUSTOS</div>
+        <div style="font-family:var(--font-head);font-size:1.2rem;color:var(--orange)">R$ ${fmtMoney(total)}</div>
+      </div>
+      ${isPrimario ? `
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 14px;flex:1">
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">RECEITA FIXA</div>
+        <div style="font-family:var(--font-head);font-size:1.2rem;color:var(--green)">R$ ${fmtMoney(receita)}</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 14px;flex:1;border:1px solid ${liquido>=0?'rgba(0,230,118,0.3)':'rgba(255,82,82,0.3)'}">
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">LÍQUIDO</div>
+        <div style="font-family:var(--font-head);font-size:1.2rem;color:${liquido>=0?'var(--green)':'var(--red)'}">
+          ${liquido>=0?'+':'−'} R$ ${fmtMoney(Math.abs(liquido))}
+        </div>
+      </div>` : ''}
     </div>
     ${custos.length === 0
       ? '<div style="text-align:center;color:var(--text3);padding:20px">Nenhum custo ativo neste mês</div>'
