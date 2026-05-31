@@ -3514,9 +3514,21 @@ function renderCustosTable() {
         </td>
         <td>Dia ${c.dia_vencimento}</td>
         <td class="amount-neg">R$ ${fmtMoney(atrasado > 0 ? totalDevido : c.valor)}${atrasado > 0 ? `<span style="display:block;font-size:0.65rem;color:var(--text3)">Mês: R$ ${fmtMoney(c.valor)}</span>` : ''}</td>
-        <td><span class="tag ${c.pago ? 'tag-green' : atrasado > 0 ? 'tag-red' : 'tag-red'}">${c.pago ? 'PAGO' : atrasado > 0 ? 'ATRASADO' : 'PENDENTE'}</span></td>
+        <td>${(() => {
+          const mesAtual = new Date().toISOString().substring(0,7);
+          const aguardando = c.mes_inicio && mesAtual < c.mes_inicio;
+          if (aguardando) return `<span class="tag" style="background:var(--bg4);color:var(--text3)">⏳ AGUARDANDO</span>`;
+          if (c.pago) return `<span class="tag tag-green">PAGO</span>`;
+          if (atrasado > 0) return `<span class="tag tag-red">ATRASADO</span>`;
+          return `<span class="tag tag-red">PENDENTE</span>`;
+        })()}</td>
         <td style="white-space:nowrap">
-          <button class="btn-icon" onclick="toggleCusto('${c.id}')" title="${c.pago ? 'Marcar como pendente' : 'Marcar como pago'}">${c.pago ? '↩️' : '✅'}</button>
+          ${(() => {
+            const mesAtual = new Date().toISOString().substring(0,7);
+            const aguardando = c.mes_inicio && mesAtual < c.mes_inicio;
+            if (aguardando) return `<button class="btn-icon" title="Aguardando início" style="opacity:0.3;cursor:default">⏳</button>`;
+            return `<button class="btn-icon" onclick="toggleCusto('${c.id}')" title="${c.pago ? 'Desfazer pagamento' : 'Marcar como pago'}">${c.pago ? '↩️' : '✅'}</button>`;
+          })()}
           <button class="btn-icon" onclick="editCusto('${c.id}')">✏️</button>
           <button class="btn-icon" onclick="deleteCusto('${c.id}')">🗑️</button>
         </td>
@@ -3527,20 +3539,22 @@ function renderCustosTable() {
   ${_renderProjecaoCustos(perfil)}`;
 }
 
+function _custoAtivoNoMes(c, mesStr) {
+  // Respeita mes_inicio para qualquer tipo de custo
+  if (c.mes_inicio && mesStr < c.mes_inicio) return false;
+  if (c.tipo_custo === 'parcelado' && c.mes_inicio) {
+    const [y, m] = c.mes_inicio.split('-').map(Number);
+    const total = c.parcelas_total || 1;
+    const fimDate = new Date(y, m - 1 + total - 1, 1);
+    return new Date(mesStr + '-01') <= fimDate;
+  }
+  return true;
+}
+
 function _calcCustoMes(mesStr, perfilFiltro) {
   return db.custos_mensais
     .filter(c => (c.perfil || 'Eu') === perfilFiltro)
-    .filter(c => {
-      if (c.tipo_custo === 'parcelado' && c.mes_inicio) {
-        if (mesStr < c.mes_inicio) return false;
-        const [y, m] = c.mes_inicio.split('-').map(Number);
-        const pagas = c.parcelas_pagas || 0;
-        const total = c.parcelas_total || 1;
-        const fimDate = new Date(y, m - 1 + total - 1, 1);
-        return new Date(mesStr + '-01') <= fimDate;
-      }
-      return true;
-    })
+    .filter(c => _custoAtivoNoMes(c, mesStr))
     .reduce((a, c) => a + parseFloat(c.valor || 0), 0);
 }
 
@@ -3597,17 +3611,16 @@ function openAddCusto(id) {
       </select>
     </div>
     <div id="cParcelasWrap" style="display:${tipo==='parcelado'?'block':'none'}">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Total de Parcelas</label>
-          <input type="number" min="2" max="120" class="form-control" id="cParcelas" value="${c?.parcelas_total || 2}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Mês da 1ª Parcela</label>
-          <input type="month" class="form-control" id="cMesInicio" value="${c?.mes_inicio || mesAtual}">
-        </div>
+      <div class="form-group">
+        <label class="form-label">Total de Parcelas</label>
+        <input type="number" min="2" max="120" class="form-control" id="cParcelas" value="${c?.parcelas_total || 2}">
       </div>
       ${c?.parcelas_pagas ? `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px">✅ ${c.parcelas_pagas} parcela(s) já paga(s)</div>` : ''}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Começar a cobrar a partir de</label>
+      <input type="month" class="form-control" id="cMesInicio" value="${c?.mes_inicio || ''}">
+      <div style="font-size:0.7rem;color:var(--text3);margin-top:3px">Deixe em branco para cobrar já este mês. Use para definir quando começa ou para não cobrar mês que já pagou manualmente.</div>
     </div>
     <div class="form-group">
       <label class="form-label">Perfil de gestão</label>
@@ -3643,7 +3656,7 @@ function saveCusto(id) {
   const perfil = document.getElementById('cPerfil')?.value || 'Eu';
   const tipo_custo = document.getElementById('cTipo')?.value || 'fixo';
   const parcelas_total = tipo_custo === 'parcelado' ? (parseInt(document.getElementById('cParcelas')?.value) || 2) : null;
-  const mes_inicio = tipo_custo === 'parcelado' ? (document.getElementById('cMesInicio')?.value || null) : null;
+  const mes_inicio = document.getElementById('cMesInicio')?.value || null;
   if (!nome || !valor || !dia) return alert('Preencha todos os campos');
   const dados = { nome, valor, dia_vencimento: dia, perfil, tipo_custo, parcelas_total, mes_inicio };
   if (id) {
@@ -3718,10 +3731,12 @@ function toggleCusto(id) {
     <div style="background:rgba(255,152,0,0.06);border:1px solid var(--orange);border-radius:var(--radius2);padding:10px;margin-top:10px;font-size:0.78rem;color:var(--text2)">
       💡 O valor será lançado como <strong>gasto</strong> e debitado da conta selecionada.
     </div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn btn-primary" onclick="_confirmarPagCusto('${id}')">✅ Confirmar Pagamento</button>
-      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-primary" style="flex:1" onclick="_confirmarPagCusto('${id}')">✅ Paguei agora — debitar conta</button>
+      <button class="btn btn-outline" style="flex:1;border-color:var(--green);color:var(--green)" onclick="_confirmarPagCustoSimples('${id}')">📝 Já paguei esse mês — só marcar</button>
     </div>
+    <div style="font-size:0.68rem;color:var(--text3);margin-top:6px">Use "Já paguei" quando pagou fora do app e não quer debitar da conta.</div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="closeModal()">Cancelar</button>
   `);
 }
 
