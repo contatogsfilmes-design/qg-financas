@@ -1883,8 +1883,7 @@ function renderDashboard() {
   const recebidosBruto = calcRecebidosBruto();
   const gastosBruto = calcGastosBruto();
   const thisMonth = new Date().toISOString().substring(0, 7);
-  const totalCustos = db.custos_mensais
-    .reduce((a, c) => a + parseFloat(c.valor || 0) + parseFloat(c.valor_atrasado || 0), 0);
+  const totalCustos = db.custos_mensais.reduce((a, c) => a + parseFloat(c.valor || 0), 0);
   const totalInvest = db.investimentos.reduce((a, i) => a + parseFloat(i.valor || 0), 0);
   const totalPend = db.pendencias.reduce((a, p) => {
     return a + p.entradas.reduce((b, e) => {
