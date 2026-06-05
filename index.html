@@ -1786,16 +1786,6 @@ function renderMobileQuick() {
           onkeydown="if(event.key==='Enter'){_mqLancar();event.preventDefault()}">
       </div>
 
-      <!-- Data (compacto) -->
-      <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px">
-        <label style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;white-space:nowrap">DATA</label>
-        <input type="date" id="mqData" class="form-control" value="${today()}" style="flex:1">
-      </div>
-
-      <!-- Banco -->
-      <div style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;margin-bottom:8px">${_mqModo==='gasto'?'PAGO COM':'ENTROU EM'}</div>
-      <div class="mq-banco-grid">${bancosBtns}</div>
-
       ${_mqModo === 'gasto' ? `
       <!-- Categoria -->
       <div style="margin-bottom:16px">
@@ -1805,6 +1795,16 @@ function renderMobileQuick() {
           ${db.settings.tags_gastos.map(t => `<option value="${t}" ${_mqTag===t?'selected':''}>${t}</option>`).join('')}
         </select>
       </div>` : ''}
+
+      <!-- Banco -->
+      <div style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;margin-bottom:8px">${_mqModo==='gasto'?'PAGO COM':'ENTROU EM'}</div>
+      <div class="mq-banco-grid">${bancosBtns}</div>
+
+      <!-- Data (compacto) -->
+      <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px">
+        <label style="font-size:0.72rem;color:var(--text3);letter-spacing:2px;white-space:nowrap">DATA</label>
+        <input type="date" id="mqData" class="form-control" value="${today()}" style="flex:1">
+      </div>
 
       <!-- Botão -->
       <button class="mq-submit ${_mqModo==='gasto'?'mq-submit-gasto':'mq-submit-entrada'}" onclick="_mqLancar()">
@@ -1882,7 +1882,10 @@ function renderDashboard() {
   const totalBancos = calcTotalCaixa(); // kept for chart/compat usage below
   const recebidosBruto = calcRecebidosBruto();
   const gastosBruto = calcGastosBruto();
-  const totalCustos = db.custos_mensais.reduce((a, c) => a + parseFloat(c.valor || 0), 0);
+  const thisMonth = new Date().toISOString().substring(0, 7);
+  const totalCustos = db.custos_mensais
+    .filter(c => _custoAtivoNoMes(c, thisMonth))
+    .reduce((a, c) => a + parseFloat(c.valor || 0), 0);
   const totalInvest = db.investimentos.reduce((a, i) => a + parseFloat(i.valor || 0), 0);
   const totalPend = db.pendencias.reduce((a, p) => {
     return a + p.entradas.reduce((b, e) => {
@@ -1890,8 +1893,6 @@ function renderDashboard() {
       return b + Math.max(0, parseFloat(e.valor||0) - pago);
     }, 0);
   }, 0);
-
-  const thisMonth = new Date().toISOString().substring(0, 7);
   const gastosMonth   = db.gastos.filter(g => g.data?.startsWith(thisMonth) && !g.emprestado).reduce((a, g) => a + parseFloat(g.valor || 0), 0);
   const entradasMonth = db.entradas_caixa.filter(e => e.data?.startsWith(thisMonth)).reduce((a, e) => a + parseFloat(e.valor || 0), 0);
   const fluxoMes = entradasMonth - gastosMonth;
@@ -2854,7 +2855,9 @@ function renderFluxoMesesChart() {
   if (!ctx) return;
   const fluxoPorMes = {};
   const hoje = new Date();
-  for (let i = 11; i >= 0; i--) {
+  const inicio = new Date(2026, 3, 1); // abril 2026
+  const mesesBack = (hoje.getFullYear() - inicio.getFullYear()) * 12 + (hoje.getMonth() - inicio.getMonth());
+  for (let i = mesesBack; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
     const mesFim = new Date(d.getFullYear(), d.getMonth() + 1, 0);
     const mesStr = d.toISOString().substring(0, 7);
@@ -2894,7 +2897,9 @@ function renderFluxoMesesTabela() {
   if (!el) return;
   const fluxoPorMes = {};
   const hoje = new Date();
-  for (let i = 11; i >= 0; i--) {
+  const inicio = new Date(2026, 3, 1); // abril 2026
+  const mesesBack = (hoje.getFullYear() - inicio.getFullYear()) * 12 + (hoje.getMonth() - inicio.getMonth());
+  for (let i = mesesBack; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
     const mesStr = d.toISOString().substring(0, 7);
     const mesPrevio = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
