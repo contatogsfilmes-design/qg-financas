@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -1883,7 +1883,8 @@ function renderDashboard() {
   const recebidosBruto = calcRecebidosBruto();
   const gastosBruto = calcGastosBruto();
   const thisMonth = new Date().toISOString().substring(0, 7);
-  const totalCustos = db.custos_mensais.reduce((a, c) => a + parseFloat(c.valor || 0), 0);
+  const perfilPrimario = _getPerfis()[0] || 'Eu';
+  const totalCustos = db.custos_mensais.filter(c => (c.perfil || 'Eu') === perfilPrimario).reduce((a, c) => a + parseFloat(c.valor || 0) + parseFloat(c.valor_atrasado || 0), 0);
   const totalInvest = db.investimentos.reduce((a, i) => a + parseFloat(i.valor || 0), 0);
   const totalPend = db.pendencias.reduce((a, p) => {
     return a + p.entradas.reduce((b, e) => {
@@ -1898,7 +1899,7 @@ function renderDashboard() {
   const rendaFixaClientes = db.clientes
     .filter(c => (c.tipo_cobranca || 'mensal') === 'mensal')
     .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0);
-  const projecaoSobra = rendaFixaClientes + entradasMonth - totalCustos - gastosMonth;
+  const projecaoSobra = rendaFixaClientes + entradasMonth - totalCustos - gastosMonth - totalPend;
 
   // A RECEBER: only clients NOT yet paid for current month (mensais) + unpaid freelances
   const totalReceber = (() => {
@@ -2026,6 +2027,11 @@ function renderDashboard() {
           <span style="color:var(--text2);font-size:0.85rem">💸 Gastos variáveis (este mês)</span>
           <span style="color:var(--red);font-family:var(--font-head)">− R$ ${fmtMoney(gastosMonth)}</span>
         </div>
+        ${totalPend > 0 ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,152,0,0.07);border-radius:var(--radius2);border-left:3px solid var(--orange)">
+          <span style="color:var(--text2);font-size:0.85rem">&#x26A0;&#xFE0F; Valores pendentes</span>
+          <span style="color:var(--orange);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(totalPend)}</span>
+        </div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${projecaoSobra >= 0 ? 'rgba(0,230,118,0.08)' : 'rgba(255,82,82,0.08)'};border-radius:var(--radius2);border:1px solid ${projecaoSobra >= 0 ? 'var(--green)' : 'var(--red)'}">
           <span style="color:var(--text);font-size:0.9rem;font-weight:600">💰 Vai sobrar no fim do mês</span>
           <span style="color:${projecaoSobra >= 0 ? 'var(--green)' : 'var(--red)'};font-family:var(--font-head);font-size:1.15rem">
