@@ -1878,6 +1878,12 @@ function _mqLancar() {
   }, 600);
 }
 
+function _toggleProjecao(key) {
+  if (!window._projecaoToggle) window._projecaoToggle = {};
+  window._projecaoToggle[key] = !window._projecaoToggle[key];
+  renderDashboard();
+}
+
 function renderDashboard() {
   const totalBancos = calcTotalCaixa(); // kept for chart/compat usage below
   const recebidosBruto = calcRecebidosBruto();
@@ -1899,9 +1905,22 @@ function renderDashboard() {
   const rendaFixaClientes = db.clientes
     .filter(c => (c.tipo_cobranca || 'mensal') === 'mensal')
     .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0);
-  const projecaoSobra = rendaFixaClientes + entradasMonth - totalCustos - gastosMonth;
+
+  // Recebido de clientes este mes (via c.pagamentos)
+  const recebidoClientesMes = db.clientes.reduce((a, c) => {
+    return a + (c.pagamentos||[]).filter(p => (p.mes_referencia||p.data||'').substring(0,7) === thisMonth).reduce((b, p) => b + parseFloat(p.valor||0), 0);
+  }, 0);
+  // Entradas extras = entradas do mes menos o que veio de clientes
+  const entradasExtras = Math.max(0, entradasMonth - recebidoClientesMes);
+  // Gastos variaveis = gastos excluindo pagamentos de custos fixos (tag 'Custo fixo' + gasto_id linkado)
+  const _gastosIdsCustos = new Set(db.custos_mensais.map(c => c.gasto_id).filter(Boolean));
+  const gastosVariaveis = db.gastos.filter(g => g.data?.startsWith(thisMonth) && !g.emprestado && !_gastosIdsCustos.has(g.id)).reduce((a, g) => a + parseFloat(g.valor||0), 0);
+  // Custos do perfil primario: pagos e falta pagar
+  const custosJaPagos = db.custos_mensais.filter(c => (c.perfil||'Eu') === perfilPrimario && c.pago).reduce((a, c) => a + parseFloat(c.valor||0), 0);
+  const custosFaltaPagar = Math.max(0, totalCustos - custosJaPagos);
 
   // A RECEBER: only clients NOT yet paid for current month (mensais) + unpaid freelances
+
   const totalReceber = (() => {
     let total = 0;
     db.clientes.forEach(c => {
@@ -1917,6 +1936,18 @@ function renderDashboard() {
     return total;
   })();
   const totalCofrinhos = db.cofrinhos.reduce((a, c) => a + parseFloat(c.saldo || 0), 0);
+
+  // Toggles da projecao (persistem na sessao)
+  if (!window._projecaoToggle) window._projecaoToggle = { rendaFixa:true, recebidoClientes:true, entradasExtras:true, custos:true, gastosVariaveis:true, faltaReceber:false, faltaPagar:false };
+  const _pt = window._projecaoToggle;
+  let projecaoSobra = 0;
+  if (_pt.rendaFixa)        projecaoSobra += rendaFixaClientes;
+  if (_pt.recebidoClientes) projecaoSobra += recebidoClientesMes;
+  if (_pt.entradasExtras)   projecaoSobra += entradasExtras;
+  if (_pt.custos)           projecaoSobra -= totalCustos;
+  if (_pt.gastosVariaveis)  projecaoSobra -= gastosVariaveis;
+  if (_pt.faltaReceber)     projecaoSobra += totalReceber;
+  if (_pt.faltaPagar)       projecaoSobra -= custosFaltaPagar;
 
   // Total em caixa = todos os bancos + dinheiro físico em mão
   const dinheiroFisico   = parseFloat(db.dinheiro_fisico || 0);
@@ -2009,29 +2040,39 @@ function renderDashboard() {
 
     <!-- PROJEÇÃO FIM DO MÊS -->
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">🔮 PROJEÇÃO FIM DO MÊS</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="card-title" style="margin:0">&#x1F52E; PROJEC&#xC3;O FIM DO M&#xCA;S</div>
+        <span style="font-size:0.68rem;color:var(--text3);letter-spacing:1px">marque/desmarque para filtrar</span>
+      </div>
       <div style="display:grid;gap:6px">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">💼 Renda fixa (clientes mensais)</span>
-          <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(rendaFixaClientes)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">💵 Entradas extras recebidas</span>
-          <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(entradasMonth)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">📋 Custos fixos mensais</span>
-          <span style="color:var(--orange);font-family:var(--font-head)">− R$ ${fmtMoney(totalCustos)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">💸 Gastos variáveis (este mês)</span>
-          <span style="color:var(--red);font-family:var(--font-head)">− R$ ${fmtMoney(gastosMonth)}</span>
-        </div>
+
+        ${(() => {
+          const rows = [
+            { key:'rendaFixa',        emoji:'&#x1F4BC;', label:'Renda fixa (clientes mensais)',  valor: rendaFixaClientes,   pos: true,  color:'var(--green)'  },
+            { key:'recebidoClientes', emoji:'&#x1F4B0;', label:'J&#xE1; recebido de clientes',    valor: recebidoClientesMes, pos: true,  color:'var(--green)'  },
+            { key:'entradasExtras',   emoji:'&#x1F4B5;', label:'Entradas extras',                 valor: entradasExtras,      pos: true,  color:'var(--green)'  },
+            { key:'custos',           emoji:'&#x1F4CB;', label:'Custos fixos mensais',            valor: totalCustos,         pos: false, color:'var(--orange)' },
+            { key:'gastosVariaveis',  emoji:'&#x1F4B8;', label:'Gastos vari&#xE1;veis',           valor: gastosVariaveis,     pos: false, color:'var(--red)'    },
+            { key:'faltaReceber',     emoji:'&#x1F4E5;', label:'Falta a receber (clientes)',      valor: totalReceber,        pos: true,  color:'var(--blue)'   },
+            { key:'faltaPagar',       emoji:'&#x1F4E4;', label:'Falta pagar custos fixos',        valor: custosFaltaPagar,    pos: false, color:'var(--red)'    },
+          ];
+          return rows.map(r => {
+            const on = _pt[r.key];
+            const valColor = on ? r.color : 'var(--text3)';
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2);${on?'':'opacity:0.45'}">
+              <input type="checkbox" onchange="_toggleProjecao('${r.key}')" ${on?'checked':''} style="cursor:pointer;width:16px;height:16px;accent-color:${r.pos?'var(--green)':'var(--red)'};flex-shrink:0">
+              <span style="flex:1;color:var(--text2);font-size:0.85rem">${r.emoji} ${r.label}</span>
+              <span style="color:${valColor};font-family:var(--font-head)">${r.pos?'+':'&#x2212;'} R$ ${fmtMoney(r.valor)}</span>
+            </div>`;
+          }).join('');
+        })()}
+
+        <div style="height:1px;background:var(--border2);margin:4px 0"></div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${projecaoSobra >= 0 ? 'rgba(0,230,118,0.08)' : 'rgba(255,82,82,0.08)'};border-radius:var(--radius2);border:1px solid ${projecaoSobra >= 0 ? 'var(--green)' : 'var(--red)'}">
-          <span style="color:var(--text);font-size:0.9rem;font-weight:600">💰 Vai sobrar no fim do mês</span>
+          <span style="color:var(--text);font-size:0.9rem;font-weight:600">&#x1F4B0; Vai sobrar no fim do m&#xEA;s</span>
           <span style="color:${projecaoSobra >= 0 ? 'var(--green)' : 'var(--red)'};font-family:var(--font-head);font-size:1.15rem">
-            ${projecaoSobra < 0 ? '−' : ''} R$ ${fmtMoney(Math.abs(projecaoSobra))}${projecaoSobra < 0 ? ' ⚠️' : ''}
+            ${projecaoSobra < 0 ? '&#x2212;' : ''} R$ ${fmtMoney(Math.abs(projecaoSobra))}${projecaoSobra < 0 ? ' &#x26A0;&#xFE0F;' : ''}
           </span>
         </div>
       </div>
