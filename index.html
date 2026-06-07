@@ -7600,7 +7600,13 @@ ${bancosStr}
 GASTOS HOJE:
 ${gastosHojeStr}
 
-TOTAL GASTO EM ${mesAtual}: R$ ${fmtMoney(totalMes)}
+━━ GASTOS EM ${mesAtual} ━━
+Total gasto: R$ ${fmtMoney(totalMes)}
+  → Contas fixas pagas (custos mensais): R$ ${fmtMoney(totalGastosFixPag)}
+  → Gastos externos/variáveis (comida, gasolina, etc.): R$ ${fmtMoney(totalGastosExt)}
+
+GASTOS EXTERNOS ESTE MÊS (detalhado):
+${gastosExtStr}
 
 ÚLTIMOS 5 GASTOS:
 ${ultimosStr}
@@ -7608,8 +7614,16 @@ ${ultimosStr}
 CUSTOS MENSAIS FIXOS:
 ${custosStr}
 
-CLIENTES:
+CLIENTES E STATUS DE RECEBIMENTO (${mesAtual}):
 ${clientesStr}
+
+━━ PROJEÇÃO FIM DO MÊS ━━
++ Falta receber de clientes: R$ ${fmtMoney(_totalReceber)}
++ Já recebido de clientes:   R$ ${fmtMoney(_recebidoCli)}
+- Contas fixas já pagas:     R$ ${fmtMoney(_custosJaPagos)}
+- Contas fixas a pagar:      R$ ${fmtMoney(_faltaPagar)}
+- Gastos externos este mês:  R$ ${fmtMoney(totalGastosExt)}
+= Sobra estimada:            R$ ${fmtMoney(_projecao)} ${_projecao < 0 ? '⚠️ NEGATIVO' : ''}
 
 ━━ REGRAS DE COMPORTAMENTO ━━
 1. Quando saldo < R$ 1.000: avise com urgência, tom de preocupação real ("olha, você tá no limite...")
