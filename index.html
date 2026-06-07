@@ -14,85 +14,73 @@
 <title>QG FINANÇAS</title>
 <script>
 (function(){
-  try {
-    var S = 512, c = document.createElement('canvas');
-    c.width = c.height = S;
-    var x = c.getContext('2d');
-    if (!x) return;
+  function drawQGIcon() {
+    try {
+      var S = 512, c = document.createElement('canvas');
+      c.width = c.height = S;
+      var x = c.getContext('2d');
+      if (!x) return;
 
-    // Rounded rect helper (sem roundRect para compat iOS antiga)
-    function rr(px, py, pw, ph, r) {
-      x.beginPath();
-      x.moveTo(px+r, py);
-      x.arcTo(px+pw, py,   px+pw, py+ph, r);
-      x.arcTo(px+pw, py+ph, px,   py+ph, r);
-      x.arcTo(px,    py+ph, px,   py,    r);
-      x.arcTo(px,    py,    px+pw, py,   r);
-      x.closePath();
-    }
+      function rr(px, py, pw, ph, r) {
+        x.beginPath();
+        x.moveTo(px+r, py);
+        x.arcTo(px+pw, py,    px+pw, py+ph, r);
+        x.arcTo(px+pw, py+ph, px,    py+ph, r);
+        x.arcTo(px,    py+ph, px,    py,    r);
+        x.arcTo(px,    py,    px+pw, py,    r);
+        x.closePath();
+      }
 
-    // Fundo
-    rr(0, 0, S, S, 90);
-    x.fillStyle = '#0f1117';
-    x.fill();
+      // Fundo
+      rr(0, 0, S, S, 90);
+      x.fillStyle = '#0f1117';
+      x.fill();
 
-    // Borda verde
-    rr(10, 10, 492, 492, 82);
-    x.strokeStyle = '#00e676';
-    x.lineWidth = 5;
-    x.globalAlpha = 0.32;
-    x.stroke();
-    x.globalAlpha = 1;
+      // Borda verde
+      rr(10, 10, 492, 492, 82);
+      x.strokeStyle = '#00e676';
+      x.lineWidth = 5;
+      x.globalAlpha = 0.32;
+      x.stroke();
+      x.globalAlpha = 1;
 
-    // QG — mede e reduz fonte até caber em 400px
-    x.fillStyle = '#00e676';
-    x.textAlign = 'center';
-    x.textBaseline = 'middle';
-    var fs = 210;
-    x.font = '900 ' + fs + 'px "Courier New",Courier,monospace';
-    while (x.measureText('QG').width > 400 && fs > 80) {
-      fs -= 4;
-      x.font = '900 ' + fs + 'px "Courier New",Courier,monospace';
-    }
-    x.fillText('QG', 256, 218);
+      // QG em Orbitron — reduz até caber em 400px
+      x.fillStyle = '#00e676';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      var fs = 200;
+      x.font = '900 ' + fs + 'px Orbitron, "Courier New", monospace';
+      while (x.measureText('QG').width > 400 && fs > 60) {
+        fs -= 4;
+        x.font = '900 ' + fs + 'px Orbitron, "Courier New", monospace';
+      }
+      x.fillText('QG', 256, 186);
 
-    // Linha separadora
-    x.globalAlpha = 0.28;
-    x.fillStyle = '#00e676';
-    x.fillRect(56, 325, 400, 3);
-    x.globalAlpha = 1;
+      // Linha divisória
+      x.globalAlpha = 0.25;
+      x.fillStyle = '#00e676';
+      x.fillRect(56, 310, 400, 2);
+      x.globalAlpha = 1;
 
-    // Saco — corpo oval
-    x.beginPath();
-    x.ellipse(256, 422, 58, 50, 0, 0, Math.PI*2);
-    x.fillStyle = '#00e676';
-    x.fill();
+      // Emoji 💰
+      x.font = '170px serif';
+      x.textBaseline = 'middle';
+      x.fillText('💰', 256, 408);
 
-    // Saco — pescoço
-    rr(234, 374, 44, 26, 10);
-    x.fillStyle = '#00e676';
-    x.fill();
+      var url = c.toDataURL('image/png');
+      var fi = document.getElementById('qg-favicon');
+      var ai = document.getElementById('qg-ati');
+      if (fi) { fi.href = url; fi.type = 'image/png'; }
+      if (ai) ai.href = url;
+    } catch(e) {}
+  }
 
-    // Saco — nó exterior
-    x.beginPath();
-    x.arc(256, 367, 16, 0, Math.PI*2);
-    x.fillStyle = '#0f1117';
-    x.fill();
-    x.strokeStyle = '#00e676';
-    x.lineWidth = 6;
-    x.stroke();
-
-    // Cifrão dentro do saco
-    x.fillStyle = '#0f1117';
-    x.font = '900 52px "Courier New",Courier,monospace';
-    x.textBaseline = 'middle';
-    x.fillText('$', 256, 428);
-
-    var url = c.toDataURL('image/png');
-    document.getElementById('qg-favicon').href = url;
-    document.getElementById('qg-favicon').type  = 'image/png';
-    document.getElementById('qg-ati').href = url;
-  } catch(e) {}
+  // Aguarda Orbitron (e demais fontes) carregar antes de desenhar
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(drawQGIcon);
+  } else {
+    window.addEventListener('load', drawQGIcon);
+  }
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
