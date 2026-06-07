@@ -5066,15 +5066,22 @@ function renderClientesMensaisPorMes(mesBase) {
         const totalVales  = valesAtivos.reduce((a,v)=>a+parseFloat(v.valor||0),0);
         const valorLiq    = Math.max(0, valMensal - totalVales);
 
-        const borderColor = pago ? 'var(--green)' : 'var(--yellow)';
-        const badgeBg     = pago ? 'rgba(0,230,118,0.12)' : 'rgba(255,193,7,0.12)';
-        const badgeColor  = pago ? 'var(--green)' : 'var(--yellow)';
-        const badgeBorder = pago ? 'rgba(0,230,118,0.3)' : 'rgba(255,193,7,0.3)';
+        const extras         = c.extras_mensais || [];
+        const totalExtras    = extras.reduce((a, e) => a + parseFloat(e.valor||0), 0);
+        const totalGeral     = valMensal + totalExtras;
+        const extrasRecNoMes = extras.map(e => ({ ...e, _rec: (e.recebimentos||[]).find(r => r.mes === mesBase) }));
+        const todosRecebidos = pago && extrasRecNoMes.every(e => e._rec);
+        const borderColor    = todosRecebidos ? 'var(--green)' : pago ? 'var(--blue)' : 'var(--yellow)';
+        const badgeBg        = pago ? 'rgba(0,230,118,0.12)' : 'rgba(255,193,7,0.12)';
+        const badgeColor     = pago ? 'var(--green)' : 'var(--yellow)';
+        const badgeBorder    = pago ? 'rgba(0,230,118,0.3)' : 'rgba(255,193,7,0.3)';
 
         return `
         <div class="client-card" style="border-left:3px solid ${borderColor}">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
             <div style="flex:1;min-width:0">
+
+              <!-- Nome + status -->
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <div class="client-name">${c.nome}</div>
                 <span class="client-cat">${c.categoria||''}</span>
@@ -5084,64 +5091,59 @@ function renderClientesMensaisPorMes(mesBase) {
                 </span>
               </div>
 
-              <!-- Valor -->
-              <div style="display:flex;align-items:baseline;gap:10px;margin-top:5px;flex-wrap:wrap">
-                <div style="font-family:var(--font-head);font-size:1.15rem;
-                  color:${pago?'var(--text3)':future?'var(--text2)':'var(--text)'};
-                  ${pago?'text-decoration:line-through;opacity:0.5':''}">
-                  R$ ${fmtMoney(valMensal)}/mês
-                </div>
-                ${!future && totalVales>0 && !pago
-                  ? `<span style="font-size:0.75rem;color:var(--orange)">
-                      −R$ ${fmtMoney(totalVales)} vales → a receber R$ <strong>${fmtMoney(valorLiq)}</strong>
-                    </span>`
-                  : ''}
+              <!-- Total geral destaque -->
+              <div style="margin-top:6px">
+                <span style="font-family:var(--font-head);font-size:1.2rem;color:${pago?'var(--text3)':'var(--text)'};${pago?'text-decoration:line-through;opacity:0.5':''}">
+                  R$ ${fmtMoney(totalGeral)}/mês
+                </span>
+                ${totalExtras > 0 ? `<span style="font-size:0.7rem;color:var(--text3);margin-left:6px">total</span>` : ''}
               </div>
 
-              <!-- Recebido info -->
+              <!-- Breakdown: parcela principal + extras -->
+              ${totalExtras > 0 ? `
+              <div style="margin-top:6px;display:grid;gap:4px">
+                <!-- Parcela principal -->
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius2);flex-wrap:wrap">
+                  <span style="font-size:0.8rem;color:var(--text2);flex:1">
+                    ${pago?'✅':'⏳'} Parcela principal${c.dia_pagamento?` <span style="color:var(--text3)">(dia ${c.dia_pagamento})</span>`:''}
+                  </span>
+                  <span style="font-family:var(--font-head);font-size:0.9rem;color:${pago?'var(--text3)':'var(--green)'}">R$ ${fmtMoney(valMensal)}</span>
+                  ${!pago
+                    ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">✅ Receber</button>`
+                    : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️</button>`}
+                </div>
+                <!-- Extras -->
+                ${extrasRecNoMes.map(e => `
+                <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius2);flex-wrap:wrap">
+                  <span style="font-size:0.8rem;color:var(--text2);flex:1">
+                    ${e._rec?'✅':'💰'} ${e.descricao||'Extra'}${e.dia?` <span style="color:var(--text3)">(dia ${e.dia})</span>`:''}
+                    ${e._rec?`<span style="color:var(--green);font-size:0.7rem"> — recebido ${fmtDate(e._rec.data)}</span>`:''}
+                  </span>
+                  <span style="font-family:var(--font-head);font-size:0.9rem;color:${e._rec?'var(--text3)':'var(--green)'}">R$ ${fmtMoney(e.valor)}</span>
+                  ${!e._rec
+                    ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="receberExtraMensal('${c.id}','${e.id}','${mesBase}')">✅ Receber</button>`
+                    : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerExtraMensal('${c.id}','${e.id}','${mesBase}')">↩️</button>`}
+                  <button class="btn-icon" style="font-size:0.75rem;opacity:0.4" onclick="deleteExtraMensal('${c.id}','${e.id}')">🗑️</button>
+                </div>`).join('')}
+              </div>` : `
+              <!-- Sem extras: layout simples -->
+              ${!future && totalVales>0 && !pago
+                ? `<div style="font-size:0.75rem;color:var(--orange);margin-top:3px">−R$ ${fmtMoney(totalVales)} vales → a receber R$ <strong>${fmtMoney(valorLiq)}</strong></div>`
+                : ''}
               ${pago && recMes>0
-                ? `<div style="font-size:0.75rem;color:var(--green);margin-top:3px">
-                    ✅ Recebido R$ ${fmtMoney(recMes)} — ${pgsMes.map(p=>fmtDate(p.data)).join(', ')}
-                  </div>`
+                ? `<div style="font-size:0.75rem;color:var(--green);margin-top:3px">✅ Recebido R$ ${fmtMoney(recMes)} — ${pgsMes.map(p=>fmtDate(p.data)).join(', ')}</div>`
                 : ''}
-
-              ${!pago && !future && totalVales>0
-                ? `<div style="font-size:0.72rem;color:var(--orange);margin-top:2px">
-                    💸 Vales: ${valesAtivos.map(v=>`R$ ${fmtMoney(v.valor)}${v.motivo?' ('+v.motivo+')':''}`).join(', ')}
-                    <span style="color:var(--text3);font-size:0.68rem"> — entradas manuais no caixa</span>
-                  </div>`
-                : ''}
-
               ${c.dia_pagamento
                 ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:2px">📅 Paga todo dia ${c.dia_pagamento}</div>`
-                : ''}
+                : ''}`}
 
-              <!-- Extras mensais -->
-              ${(c.extras_mensais||[]).length > 0 ? `
-              <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border2)">
-                ${(c.extras_mensais||[]).map(e => {
-                  const recNoMes = (e.recebimentos||[]).find(r => r.mes === mesBase);
-                  return `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
-                    <span style="font-size:0.78rem;color:${recNoMes?'var(--text3)':'var(--text2)'}">
-                      ${recNoMes?'✅':'💰'} ${e.descricao||'Extra'} — R$ ${fmtMoney(e.valor)}
-                      ${e.dia?`<span style="color:var(--text3)"> (dia ${e.dia})</span>`:''}
-                      ${recNoMes?`<span style="color:var(--green);font-size:0.7rem"> recebido ${fmtDate(recNoMes.data)}</span>`:''}
-                    </span>
-                    ${!recNoMes
-                      ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="receberExtraMensal('${c.id}','${e.id}','${mesBase}')">+ Receber</button>`
-                      : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerExtraMensal('${c.id}','${e.id}','${mesBase}')">↩️</button>`}
-                    <button class="btn-icon" style="font-size:0.75rem;opacity:0.5" onclick="deleteExtraMensal('${c.id}','${e.id}')">🗑️</button>
-                  </div>`;
-                }).join('')}
-              </div>` : ''}
             </div>
 
-            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-              ${!pago
-                ? `<button class="btn btn-primary btn-sm" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">
-                    ✅ ${future?'Receber':'Confirmar Recebimento'}
-                  </button>`
-                : `<button class="btn btn-outline btn-sm" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️ Desfazer</button>`}
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+              ${totalExtras === 0 ? (!pago
+                ? `<button class="btn btn-primary btn-sm" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">✅ ${future?'Receber':'Confirmar'}</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️ Desfazer</button>`)
+                : ''}
               <button class="btn btn-outline btn-sm" onclick="addExtraMensal('${c.id}')">+ Extra</button>
               <button class="btn btn-outline btn-sm" onclick="viewCliente('${c.id}')">👁️</button>
               <button class="btn-icon" onclick="editCliente('${c.id}')">✏️</button>
