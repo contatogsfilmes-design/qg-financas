@@ -1903,7 +1903,9 @@ function renderDashboard() {
 
   // Recebido de clientes este mes (via c.pagamentos)
   const recebidoClientesMes = db.clientes.reduce((a, c) => {
-    return a + (c.pagamentos||[]).filter(p => (p.mes_referencia||p.data||'').substring(0,7) === thisMonth).reduce((b, p) => b + parseFloat(p.valor||0), 0);
+    const mainPgs = (c.pagamentos||[]).filter(p => (p.mes_referencia||p.data||'').substring(0,7) === thisMonth).reduce((b, p) => b + parseFloat(p.valor||0), 0);
+    const extrasPgs = (c.extras_mensais||[]).reduce((b, e) => b + (e.recebimentos||[]).filter(r => r.mes === thisMonth).reduce((s, r) => s + parseFloat(r.valor||0), 0), 0);
+    return a + mainPgs + extrasPgs;
   }, 0);
   // Entradas extras = entradas do mes menos o que veio de clientes
   const entradasExtras = Math.max(0, entradasMonth - recebidoClientesMes);
@@ -1927,6 +1929,11 @@ function renderDashboard() {
       } else if (tipo === 'freelance' && !c.freelance_pago) {
         total += parseFloat(c.valor_mensal||0);
       }
+      // Extras mensais nao recebidos este mes
+      (c.extras_mensais||[]).forEach(e => {
+        const recNoMes = (e.recebimentos||[]).some(r => r.mes === thisMonth);
+        if (!recNoMes) total += parseFloat(e.valor||0);
+      });
     });
     return total;
   })();
@@ -5108,6 +5115,25 @@ function renderClientesMensaisPorMes(mesBase) {
               ${c.dia_pagamento
                 ? `<div style="font-size:0.72rem;color:var(--text3);margin-top:2px">📅 Paga todo dia ${c.dia_pagamento}</div>`
                 : ''}
+
+              <!-- Extras mensais -->
+              ${(c.extras_mensais||[]).length > 0 ? `
+              <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border2)">
+                ${(c.extras_mensais||[]).map(e => {
+                  const recNoMes = (e.recebimentos||[]).find(r => r.mes === mesBase);
+                  return `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+                    <span style="font-size:0.78rem;color:${recNoMes?'var(--text3)':'var(--text2)'}">
+                      ${recNoMes?'✅':'💰'} ${e.descricao||'Extra'} — R$ ${fmtMoney(e.valor)}
+                      ${e.dia?`<span style="color:var(--text3)"> (dia ${e.dia})</span>`:''}
+                      ${recNoMes?`<span style="color:var(--green);font-size:0.7rem"> recebido ${fmtDate(recNoMes.data)}</span>`:''}
+                    </span>
+                    ${!recNoMes
+                      ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="receberExtraMensal('${c.id}','${e.id}','${mesBase}')">+ Receber</button>`
+                      : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerExtraMensal('${c.id}','${e.id}','${mesBase}')">↩️</button>`}
+                    <button class="btn-icon" style="font-size:0.75rem;opacity:0.5" onclick="deleteExtraMensal('${c.id}','${e.id}')">🗑️</button>
+                  </div>`;
+                }).join('')}
+              </div>` : ''}
             </div>
 
             <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
@@ -5116,6 +5142,7 @@ function renderClientesMensaisPorMes(mesBase) {
                     ✅ ${future?'Receber':'Confirmar Recebimento'}
                   </button>`
                 : `<button class="btn btn-outline btn-sm" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️ Desfazer</button>`}
+              <button class="btn btn-outline btn-sm" onclick="addExtraMensal('${c.id}')">+ Extra</button>
               <button class="btn btn-outline btn-sm" onclick="viewCliente('${c.id}')">👁️</button>
               <button class="btn-icon" onclick="editCliente('${c.id}')">✏️</button>
             </div>
@@ -5197,6 +5224,94 @@ function _confirmarPagamentoMes(clienteId, mesBase) {
 
   closeModal(); saveData();
   renderClientesMensaisPorMes(mesBase);
+}
+
+// ── Extras Mensais ──────────────────────────────────────────────────────────
+function addExtraMensal(clienteId) {
+  openModal('💰 + VALE A RECEBER', `
+    <div class="form-group"><label class="form-label">Descrição</label>
+      <input type="text" class="form-control" id="emDesc" placeholder="Ex: Parcela 2, Taxa extra...">
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Valor (R$)</label>
+        <input type="number" step="0.01" class="form-control" id="emValor" placeholder="0,00">
+      </div>
+      <div class="form-group"><label class="form-label">Dia de recebimento</label>
+        <input type="number" min="1" max="31" class="form-control" id="emDia" placeholder="Ex: 20">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="_salvarExtraMensal('${clienteId}')">✅ Salvar</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+}
+
+function _salvarExtraMensal(clienteId) {
+  const c = db.clientes.find(x => x.id === clienteId);
+  const desc = document.getElementById('emDesc').value.trim();
+  const valor = parseFloat(document.getElementById('emValor').value);
+  const dia = parseInt(document.getElementById('emDia').value) || null;
+  if (!valor) return alert('Informe o valor.');
+  if (!c.extras_mensais) c.extras_mensais = [];
+  c.extras_mensais.push({ id: uid(), descricao: desc || 'Extra', valor, dia, recebimentos: [] });
+  closeModal(); saveData(); renderReceber();
+}
+
+function receberExtraMensal(clienteId, extraId, mes) {
+  const c = db.clientes.find(x => x.id === clienteId);
+  const e = (c.extras_mensais||[]).find(x => x.id === extraId);
+  if (!e) return;
+  openModal(`💰 RECEBER EXTRA — ${e.descricao}`, `
+    <div style="padding:10px;background:var(--bg3);border-radius:var(--radius2);margin-bottom:14px">
+      <div style="font-size:0.68rem;color:var(--text3)">VALOR</div>
+      <div style="font-family:var(--font-head);color:var(--green);font-size:1.1rem">R$ ${fmtMoney(e.valor)}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Data</label>
+        <input type="date" class="form-control" id="erData" value="${today()}">
+      </div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label>
+        <input type="number" step="0.01" class="form-control" id="erValor" value="${e.valor}">
+      </div>
+    </div>
+    ${_formaPagamentoHtml('er')}
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="_confirmarExtraMensal('${clienteId}','${extraId}','${mes}')">✅ Confirmar</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+}
+
+function _confirmarExtraMensal(clienteId, extraId, mes) {
+  const c = db.clientes.find(x => x.id === clienteId);
+  const e = (c.extras_mensais||[]).find(x => x.id === extraId);
+  const data = document.getElementById('erData').value;
+  const valor = parseFloat(document.getElementById('erValor').value);
+  const forma = document.getElementById('erForma')?.value || 'pix';
+  const bancoId = document.getElementById('erConta')?.value || '';
+  if (!valor) return alert('Informe o valor.');
+  if (!e.recebimentos) e.recebimentos = [];
+  e.recebimentos.push({ id: uid(), mes, data, valor });
+  _persistEntrada({ data, hora: new Date().toTimeString().substring(0,5), valor,
+    descricao: `${e.descricao} — ${c.nome}`, categoria: c.categoria||'Recebimento', forma, bancoId, obs: '' });
+  closeModal(); saveData(); renderReceber();
+}
+
+function desfazerExtraMensal(clienteId, extraId, mes) {
+  if (!confirm('Desfazer este recebimento extra?')) return;
+  const c = db.clientes.find(x => x.id === clienteId);
+  const e = (c.extras_mensais||[]).find(x => x.id === extraId);
+  if (!e) return;
+  e.recebimentos = (e.recebimentos||[]).filter(r => r.mes !== mes);
+  saveData(); renderReceber();
+}
+
+function deleteExtraMensal(clienteId, extraId) {
+  if (!confirm('Remover este vale a receber permanentemente?')) return;
+  const c = db.clientes.find(x => x.id === clienteId);
+  c.extras_mensais = (c.extras_mensais||[]).filter(x => x.id !== extraId);
+  saveData(); renderReceber();
 }
 
 function desfazerPagamentoMes(clienteId, mesBase) {
