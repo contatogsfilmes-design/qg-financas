@@ -5744,7 +5744,6 @@ function _viewClienteMensal(c) {
   const extras       = c.extras_mensais || [];
   const totalExtras  = extras.reduce((a, e) => a + parseFloat(e.valor||0), 0);
   const totalGeral   = parseFloat(c.valor_mensal||0) + totalExtras;
-  const mesAtual     = new Date().toISOString().substring(0,7);
   const extrasRecMes = extras.map(e => ({ ...e, _rec: (e.recebimentos||[]).find(r => r.mes === mesAtual) }));
 
   openModal(`🔄 MENSAL: ${c.nome}`, `
