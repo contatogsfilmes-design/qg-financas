@@ -1923,9 +1923,13 @@ function renderDashboard() {
     db.clientes.forEach(c => {
       const tipo = c.tipo_cobranca || 'mensal';
       if (tipo === 'mensal') {
-        if (_clientePagoNoMes(c, thisMonth)) return;
+        // Calcula o que ja foi recebido este mes (pode ser parcial)
+        const recebidoMes = (c.pagamentos||[])
+          .filter(p => (p.mes_referencia||'').substring(0,7) === thisMonth)
+          .reduce((a, p) => a + parseFloat(p.valor||0), 0);
         const valesPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
-        total += Math.max(0, parseFloat(c.valor_mensal||0) - valesPend);
+        const falta = Math.max(0, parseFloat(c.valor_mensal||0) - valesPend - recebidoMes);
+        total += falta;
       } else if (tipo === 'freelance' && !c.freelance_pago) {
         total += parseFloat(c.valor_mensal||0);
       }
