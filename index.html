@@ -5155,7 +5155,9 @@ function renderClientesMensaisPorMes(mesBase) {
 
             <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap">
               ${totalExtras === 0 ? (!pago
-                ? `<button class="btn btn-primary btn-sm" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">✅ ${future?'Receber':'Confirmar'}</button>`
+                ? `<button class="btn btn-primary btn-sm" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')" style="${parcial?'background:var(--blue);border-color:var(--blue)':''}">
+                    ${parcial ? `⚡ Receber R$ ${fmtMoney(Math.max(0,valorLiq-recMes))}` : future ? '✅ Receber' : '✅ Confirmar'}
+                  </button>`
                 : `<button class="btn btn-outline btn-sm" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️ Desfazer</button>`)
                 : ''}
               <button class="btn btn-outline btn-sm" onclick="addExtraMensal('${c.id}')">+ Extra</button>
