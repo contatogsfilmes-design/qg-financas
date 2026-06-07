@@ -4917,7 +4917,13 @@ function applyRelFiltro() {
 // ============================================================
 // ── Helper: check if client has been paid for a given month ──
 function _clientePagoNoMes(c, mesYYYYMM) {
-  return (c.pagamentos||[]).some(p => (p.mes_referencia||'').substring(0,7) === mesYYYYMM);
+  const totalPago = (c.pagamentos||[])
+    .filter(p => (p.mes_referencia||'').substring(0,7) === mesYYYYMM)
+    .reduce((a, p) => a + parseFloat(p.valor||0), 0);
+  const valesQuit = (c.vales||[])
+    .filter(v => v.quitado && (v.data_quitado||'').substring(0,7) === mesYYYYMM)
+    .reduce((a,v) => a + parseFloat(v.valor||0), 0);
+  return (totalPago + valesQuit) >= parseFloat(c.valor_mensal||0) - 0.01;
 }
 
 // ── Helper: get N months starting from a given month ─────────
