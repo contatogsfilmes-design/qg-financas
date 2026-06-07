@@ -5522,20 +5522,55 @@ function selectTipoCobranca(tipo) {
 }
 
 function saveCliente(id) {
-  const nome           = document.getElementById('clNome').value.trim();
-  const categoria      = document.getElementById('clCat').value;
-  const valor_mensal   = parseFloat(document.getElementById('clValor').value) || 0;
-  const tipo_cobranca  = document.getElementById('clTipo')?.value || 'mensal';
-  const dia_pagamento  = tipo_cobranca === 'mensal' ? (parseInt(document.getElementById('clDia')?.value) || null) : null;
-  const prazo_freelance= tipo_cobranca === 'freelance' ? (document.getElementById('clPrazo')?.value || null) : null;
-  const contato        = document.getElementById('clContato').value.trim();
-  const inicio         = document.getElementById('clInicio').value;
-  const descricao      = document.getElementById('clDesc').value.trim();
+  const nome          = document.getElementById('clNome').value.trim();
+  const categoria     = document.getElementById('clCat').value;
+  const tipo_cobranca = document.getElementById('clTipo')?.value || 'mensal';
+  const contato       = document.getElementById('clContato').value.trim();
+  const inicio        = document.getElementById('clInicio').value;
+  const descricao     = document.getElementById('clDesc').value.trim();
   if (!nome) return alert('Informe o nome do cliente');
-  if (id) {
-    Object.assign(db.clientes.find(x => x.id === id), { nome, categoria, valor_mensal, tipo_cobranca, dia_pagamento, prazo_freelance, contato, inicio, descricao });
+
+  const prazo_freelance = tipo_cobranca === 'freelance' ? (document.getElementById('clPrazo')?.value || null) : null;
+
+  // Parcelado ou simples?
+  const isParcelado = tipo_cobranca === 'mensal' && document.getElementById('clParcelado')?.checked;
+  let valor_mensal, dia_pagamento, novasExtras;
+
+  if (isParcelado) {
+    // Le todas as linhas de parcela do DOM
+    const parcelas = [];
+    let i = 0;
+    while (document.getElementById(`parcelaValor_${i}`)) {
+      const v = parseFloat(document.getElementById(`parcelaValor_${i}`).value) || 0;
+      const d = parseInt(document.getElementById(`parcelaDia_${i}`).value) || null;
+      if (v > 0) parcelas.push({ valor: v, dia: d, orig: (window._clParcelas||[])[i] });
+      i++;
+    }
+    if (parcelas.length === 0) return alert('Adicione ao menos uma parcela.');
+    // Primeira parcela = campo principal
+    valor_mensal  = parcelas[0].valor;
+    dia_pagamento = parcelas[0].dia;
+    // Demais = extras_mensais (preserva recebimentos existentes)
+    novasExtras = parcelas.slice(1).map((p, idx) => ({
+      id:          p.orig?.id || uid(),
+      descricao:   `Parcela ${idx + 2}`,
+      valor:       p.valor,
+      dia:         p.dia,
+      recebimentos: p.orig?.recebimentos || []
+    }));
   } else {
-    db.clientes.push({ id: uid(), nome, categoria, valor_mensal, tipo_cobranca, dia_pagamento, prazo_freelance, contato, inicio, descricao, servicos: [], pagamentos: [], vales: [], freelance_pago: false });
+    valor_mensal  = parseFloat(document.getElementById('clValor')?.value) || 0;
+    dia_pagamento = tipo_cobranca === 'mensal' ? (parseInt(document.getElementById('clDia')?.value) || null) : null;
+    novasExtras   = null; // nao altera extras_mensais
+  }
+
+  if (id) {
+    const existing = db.clientes.find(x => x.id === id);
+    Object.assign(existing, { nome, categoria, valor_mensal, tipo_cobranca, dia_pagamento, prazo_freelance, contato, inicio, descricao });
+    if (novasExtras !== null) existing.extras_mensais = novasExtras;
+    else if (isParcelado === false) existing.extras_mensais = []; // voltou para simples, limpa
+  } else {
+    db.clientes.push({ id: uid(), nome, categoria, valor_mensal, tipo_cobranca, dia_pagamento, prazo_freelance, contato, inicio, descricao, servicos: [], pagamentos: [], vales: [], extras_mensais: novasExtras || [], freelance_pago: false });
   }
   closeModal(); saveData(); renderReceber();
 }
@@ -5545,17 +5580,25 @@ function editCliente(id) {
   const c = db.clientes.find(x => x.id === id);
   const tipo = c.tipo_cobranca || 'mensal';
   const isMensal = tipo === 'mensal';
+  const extras = c.extras_mensais || [];
+  // Monta lista de parcelas: principal + extras
+  window._clParcelas = [
+    { valor: c.valor_mensal || '', dia: c.dia_pagamento || '' },
+    ...extras.map(e => ({ id: e.id, valor: e.valor, dia: e.dia || '', desc: e.descricao || '' }))
+  ];
+  const isParcelado = extras.length > 0;
+
   openModal('EDITAR CLIENTE', `
     <!-- TIPO DE COBRANÇA -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
       <div id="btnMensal" onclick="selectTipoCobranca('mensal')"
         style="padding:12px;border-radius:var(--radius2);border:2px solid ${isMensal?'var(--green)':'var(--border)'};background:${isMensal?'var(--green-glow)':'transparent'};cursor:pointer;text-align:center;transition:all .2s">
-        <div style="font-family:var(--font-head);font-size:0.75rem;color:${isMensal?'var(--green)':'var(--text2)'};letter-spacing:1px">🔄 MENSAL</div>
+        <div style="font-family:var(--font-head);font-size:0.75rem;color:${isMensal?'var(--green)':'var(--text2)'};letter-spacing:1px">&#x1F504; MENSAL</div>
         <div style="font-size:0.72rem;color:var(--text3);margin-top:3px">Cobra todo mês automaticamente</div>
       </div>
       <div id="btnFreelance" onclick="selectTipoCobranca('freelance')"
         style="padding:12px;border-radius:var(--radius2);border:2px solid ${!isMensal?'var(--blue)':'var(--border)'};background:${!isMensal?'rgba(64,196,255,0.08)':'transparent'};cursor:pointer;text-align:center;transition:all .2s">
-        <div style="font-family:var(--font-head);font-size:0.75rem;color:${!isMensal?'var(--blue)':'var(--text2)'};letter-spacing:1px">⚡ FREELANCE</div>
+        <div style="font-family:var(--font-head);font-size:0.75rem;color:${!isMensal?'var(--blue)':'var(--text2)'};letter-spacing:1px">&#x26A1; FREELANCE</div>
         <div style="font-size:0.72rem;color:var(--text3);margin-top:3px">Cobrado uma única vez</div>
       </div>
     </div>
@@ -5569,22 +5612,95 @@ function editCliente(id) {
         </select>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label" id="clValorLabel">${isMensal?'Valor Mensal (R$)':'Valor do Freela (R$)'}</label><input type="number" step="0.01" class="form-control" id="clValor" value="${c.valor_mensal}"></div>
-      <div class="form-group" id="clDiaWrap" style="${isMensal?'':'display:none'}"><label class="form-label">Dia de Pagamento</label><input type="number" min="1" max="31" class="form-control" id="clDia" value="${c.dia_pagamento||''}"></div>
-      <div class="form-group" id="clPrazoWrap" style="${!isMensal?'':'display:none'}"><label class="form-label">Prazo / Data Limite</label><input type="date" class="form-control" id="clPrazo" value="${c.prazo_freelance||''}"></div>
+
+    <!-- TOGGLE PARCELADO (so mensal) -->
+    <div id="parceladoToggleWrap" style="${isMensal?'':'display:none'}margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.85rem;color:var(--text2)">
+        <input type="checkbox" id="clParcelado" onchange="_toggleParceladoForm()" ${isParcelado?'checked':''}
+          style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+        <span>&#x1F4C5; Pagamento parcelado (cliente paga em mais de uma vez no mês)</span>
+      </label>
     </div>
+
+    <!-- CAMPO SIMPLES (nao parcelado) -->
+    <div id="clCampoSimples" style="${isParcelado?'display:none':''}">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label" id="clValorLabel">${isMensal?'Valor Mensal (R$)':'Valor do Freela (R$)'}</label>
+          <input type="number" step="0.01" class="form-control" id="clValor" value="${c.valor_mensal}">
+        </div>
+        <div class="form-group" id="clDiaWrap" style="${isMensal?'':'display:none'}">
+          <label class="form-label">Dia de Pagamento</label>
+          <input type="number" min="1" max="31" class="form-control" id="clDia" value="${c.dia_pagamento||''}">
+        </div>
+        <div class="form-group" id="clPrazoWrap" style="${!isMensal?'':'display:none'}">
+          <label class="form-label">Prazo / Data Limite</label>
+          <input type="date" class="form-control" id="clPrazo" value="${c.prazo_freelance||''}">
+        </div>
+      </div>
+    </div>
+
+    <!-- PARCELAS (parcelado) -->
+    <div id="clCampoParcelas" style="${isParcelado?'':'display:none'}margin-bottom:14px">
+      <div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px;letter-spacing:1px">PARCELAS MENSAIS</div>
+      <div id="parcelasLista">
+        ${window._clParcelas.map((p, i) => `
+        <div id="parcelaRow_${i}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
+          <div class="form-group" style="flex:1;margin:0">
+            <label class="form-label" style="font-size:0.68rem">${i===0?'Parcela Principal':'Parcela '+(i+1)}</label>
+            <input type="number" step="0.01" class="form-control" id="parcelaValor_${i}" value="${p.valor}" placeholder="R$ 0,00">
+          </div>
+          <div class="form-group" style="width:90px;margin:0">
+            <label class="form-label" style="font-size:0.68rem">Dia</label>
+            <input type="number" min="1" max="31" class="form-control" id="parcelaDia_${i}" value="${p.dia}" placeholder="5">
+          </div>
+          ${i > 0 ? `<button onclick="_removeParcelaRow(${i})" style="padding:10px 12px;background:rgba(255,82,82,0.15);border:1px solid var(--red);color:var(--red);border-radius:var(--radius2);cursor:pointer;font-size:0.85rem;flex-shrink:0;margin-bottom:0">&#x1F5D1;&#xFE0F;</button>` : '<div style="width:44px"></div>'}
+        </div>`).join('')}
+      </div>
+      <button onclick="_addParcelaRow()" style="width:100%;padding:8px;background:transparent;border:1px dashed var(--blue);color:var(--blue);border-radius:var(--radius2);cursor:pointer;font-size:0.82rem;margin-top:4px">+ Adicionar parcela</button>
+    </div>
+
     <div class="form-row">
       <div class="form-group"><label class="form-label">Contato</label><input type="text" class="form-control" id="clContato" value="${c.contato||''}"></div>
       <div class="form-group"><label class="form-label">Data de Início</label><input type="date" class="form-control" id="clInicio" value="${c.inicio||''}"></div>
     </div>
     <div class="form-group"><label class="form-label">Descrição dos Serviços</label><textarea class="form-control" id="clDesc">${c.descricao||''}</textarea></div>
-    ${tipo==='freelance'&&c.freelance_pago?`<div style="padding:10px;background:rgba(0,230,118,0.08);border:1px solid var(--green);border-radius:var(--radius2);margin-bottom:8px;font-size:0.82rem;color:var(--green)">✅ Este freela já foi marcado como pago. Você pode reabri-lo abaixo:</div><button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${id}')">↩️ Reabrir como Pendente</button><br><br>`:''}
+    ${tipo==='freelance'&&c.freelance_pago?`<div style="padding:10px;background:rgba(0,230,118,0.08);border:1px solid var(--green);border-radius:var(--radius2);margin-bottom:8px;font-size:0.82rem;color:var(--green)">&#x2705; Este freela j&#xE1; foi marcado como pago.</div><button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${id}')">&#x21A9;&#xFE0F; Reabrir como Pendente</button><br><br>`:''}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveCliente('${id}')">Salvar</button>
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
     </div>
   `);
+}
+
+function _toggleParceladoForm() {
+  const on = document.getElementById('clParcelado').checked;
+  document.getElementById('clCampoSimples').style.display = on ? 'none' : '';
+  document.getElementById('clCampoParcelas').style.display = on ? '' : 'none';
+  if (on && window._clParcelas.length === 1) _addParcelaRow();
+}
+
+function _addParcelaRow() {
+  window._clParcelas.push({ valor: '', dia: '' });
+  const i = window._clParcelas.length - 1;
+  const row = document.createElement('div');
+  row.id = `parcelaRow_${i}`;
+  row.style.cssText = 'display:flex;gap:8px;align-items:flex-end;margin-bottom:8px';
+  row.innerHTML = `
+    <div class="form-group" style="flex:1;margin:0">
+      <label class="form-label" style="font-size:0.68rem">Parcela ${i+1}</label>
+      <input type="number" step="0.01" class="form-control" id="parcelaValor_${i}" placeholder="R$ 0,00">
+    </div>
+    <div class="form-group" style="width:90px;margin:0">
+      <label class="form-label" style="font-size:0.68rem">Dia</label>
+      <input type="number" min="1" max="31" class="form-control" id="parcelaDia_${i}" placeholder="20">
+    </div>
+    <button onclick="_removeParcelaRow(${i})" style="padding:10px 12px;background:rgba(255,82,82,0.15);border:1px solid var(--red);color:var(--red);border-radius:var(--radius2);cursor:pointer;font-size:0.85rem;flex-shrink:0">&#x1F5D1;&#xFE0F;</button>`;
+  document.getElementById('parcelasLista').appendChild(row);
+}
+
+function _removeParcelaRow(i) {
+  window._clParcelas.splice(i, 1);
+  document.getElementById(`parcelaRow_${i}`)?.remove();
 }
 
 function viewCliente(id) {
