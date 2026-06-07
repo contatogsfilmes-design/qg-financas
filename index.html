@@ -5081,11 +5081,12 @@ function renderClientesMensaisPorMes(mesBase) {
         const totalExtras    = extras.reduce((a, e) => a + parseFloat(e.valor||0), 0);
         const totalGeral     = valMensal + totalExtras;
         const extrasRecNoMes = extras.map(e => ({ ...e, _rec: (e.recebimentos||[]).find(r => r.mes === mesBase) }));
+        const parcial        = !pago && recMes > 0 && !future;
         const todosRecebidos = pago && extrasRecNoMes.every(e => e._rec);
-        const borderColor    = todosRecebidos ? 'var(--green)' : pago ? 'var(--blue)' : 'var(--yellow)';
-        const badgeBg        = pago ? 'rgba(0,230,118,0.12)' : 'rgba(255,193,7,0.12)';
-        const badgeColor     = pago ? 'var(--green)' : 'var(--yellow)';
-        const badgeBorder    = pago ? 'rgba(0,230,118,0.3)' : 'rgba(255,193,7,0.3)';
+        const borderColor    = todosRecebidos ? 'var(--green)' : pago ? 'var(--blue)' : parcial ? 'var(--blue)' : 'var(--yellow)';
+        const badgeBg        = pago ? 'rgba(0,230,118,0.12)' : parcial ? 'rgba(64,196,255,0.12)' : 'rgba(255,193,7,0.12)';
+        const badgeColor     = pago ? 'var(--green)' : parcial ? 'var(--blue)' : 'var(--yellow)';
+        const badgeBorder    = pago ? 'rgba(0,230,118,0.3)' : parcial ? 'rgba(64,196,255,0.3)' : 'rgba(255,193,7,0.3)';
 
         return `
         <div class="client-card" style="border-left:3px solid ${borderColor}">
