@@ -5099,7 +5099,7 @@ function renderClientesMensaisPorMes(mesBase) {
                 <span class="client-cat">${c.categoria||''}</span>
                 <span style="font-size:0.68rem;padding:2px 10px;border-radius:20px;font-weight:700;
                   background:${badgeBg};color:${badgeColor};border:1px solid ${badgeBorder}">
-                  ${pago ? '✅ PAGO' : future ? '📅 PRÓXIMO' : '⏳ PENDENTE'}
+                  ${pago ? '✅ PAGO' : parcial ? '⚡ PARCIAL' : future ? '📅 PRÓXIMO' : '⏳ PENDENTE'}
                 </span>
               </div>
 
