@@ -5008,9 +5008,10 @@ function renderClientesMensaisPorMes(mesBase) {
           .reduce((a,v)=>a+parseFloat(v.valor||0),0);
         recebido += recPagamentos + valesNoMes;
       } else {
-        // Current/past unpaid month: deduct active vales
+        // Current/past unpaid or partial: deduct active vales + already received
         const valesP = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
-        aPagar += Math.max(0, valMensal - valesP);
+        aPagar += Math.max(0, valMensal - valesP - recPagamentos);
+        if (recPagamentos > 0) recebido += recPagamentos;
         pendentes.push(c);
       }
     });
