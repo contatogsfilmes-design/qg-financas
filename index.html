@@ -5142,7 +5142,9 @@ function renderClientesMensaisPorMes(mesBase) {
               ${!future && totalVales>0 && !pago
                 ? `<div style="font-size:0.75rem;color:var(--orange);margin-top:3px">−R$ ${fmtMoney(totalVales)} vales → a receber R$ <strong>${fmtMoney(valorLiq)}</strong></div>`
                 : ''}
-              ${pago && recMes>0
+              ${parcial
+                ? `<div style="font-size:0.75rem;color:var(--blue);margin-top:3px">⚡ Recebido R$ ${fmtMoney(recMes)} — falta <strong style="color:var(--yellow)">R$ ${fmtMoney(Math.max(0,valorLiq-recMes))}</strong></div>`
+                : pago && recMes>0
                 ? `<div style="font-size:0.75rem;color:var(--green);margin-top:3px">✅ Recebido R$ ${fmtMoney(recMes)} — ${pgsMes.map(p=>fmtDate(p.data)).join(', ')}</div>`
                 : ''}
               ${c.dia_pagamento
