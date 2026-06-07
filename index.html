@@ -1938,16 +1938,16 @@ function renderDashboard() {
   const totalCofrinhos = db.cofrinhos.reduce((a, c) => a + parseFloat(c.saldo || 0), 0);
 
   // Toggles da projecao (persistem na sessao)
-  if (!window._projecaoToggle) window._projecaoToggle = { rendaFixa:true, recebidoClientes:true, entradasExtras:true, custos:true, gastosVariaveis:true, faltaReceber:false, faltaPagar:false };
+  // Formula padrao: faltaReceber - recebidoClientes + entradasExtras - gastosVariaveis - custosJaPagos - custosFaltaPagar
+  if (!window._projecaoToggle) window._projecaoToggle = { faltaReceber:true, recebidoClientes:true, entradasExtras:true, gastosVariaveis:true, custosJaPagos:true, custosFaltaPagar:true };
   const _pt = window._projecaoToggle;
   let projecaoSobra = 0;
-  if (_pt.rendaFixa)        projecaoSobra += rendaFixaClientes;
-  if (_pt.recebidoClientes) projecaoSobra += recebidoClientesMes;
-  if (_pt.entradasExtras)   projecaoSobra += entradasExtras;
-  if (_pt.custos)           projecaoSobra -= totalCustos;
-  if (_pt.gastosVariaveis)  projecaoSobra -= gastosVariaveis;
   if (_pt.faltaReceber)     projecaoSobra += totalReceber;
-  if (_pt.faltaPagar)       projecaoSobra -= custosFaltaPagar;
+  if (_pt.recebidoClientes) projecaoSobra -= recebidoClientesMes;
+  if (_pt.entradasExtras)   projecaoSobra += entradasExtras;
+  if (_pt.gastosVariaveis)  projecaoSobra -= gastosVariaveis;
+  if (_pt.custosJaPagos)    projecaoSobra -= custosJaPagos;
+  if (_pt.custosFaltaPagar) projecaoSobra -= custosFaltaPagar;
 
   // Total em caixa = todos os bancos + dinheiro físico em mão
   const dinheiroFisico   = parseFloat(db.dinheiro_fisico || 0);
@@ -2048,13 +2048,12 @@ function renderDashboard() {
 
         ${(() => {
           const rows = [
-            { key:'rendaFixa',        emoji:'&#x1F4BC;', label:'Renda fixa (clientes mensais)',  valor: rendaFixaClientes,   pos: true,  color:'var(--green)'  },
-            { key:'recebidoClientes', emoji:'&#x1F4B0;', label:'J&#xE1; recebido de clientes',    valor: recebidoClientesMes, pos: true,  color:'var(--green)'  },
-            { key:'entradasExtras',   emoji:'&#x1F4B5;', label:'Entradas extras',                 valor: entradasExtras,      pos: true,  color:'var(--green)'  },
-            { key:'custos',           emoji:'&#x1F4CB;', label:'Custos fixos mensais',            valor: totalCustos,         pos: false, color:'var(--orange)' },
-            { key:'gastosVariaveis',  emoji:'&#x1F4B8;', label:'Gastos vari&#xE1;veis',           valor: gastosVariaveis,     pos: false, color:'var(--red)'    },
-            { key:'faltaReceber',     emoji:'&#x1F4E5;', label:'Falta a receber (clientes)',      valor: totalReceber,        pos: true,  color:'var(--blue)'   },
-            { key:'faltaPagar',       emoji:'&#x1F4E4;', label:'Falta pagar custos fixos',        valor: custosFaltaPagar,    pos: false, color:'var(--red)'    },
+            { key:'faltaReceber',     emoji:'&#x1F4E5;', label:'Falta a receber (clientes)',  valor: totalReceber,        pos: true,  color:'var(--green)'  },
+            { key:'recebidoClientes', emoji:'&#x1F4B0;', label:'J&#xE1; recebido de clientes', valor: recebidoClientesMes, pos: false, color:'var(--orange)' },
+            { key:'entradasExtras',   emoji:'&#x1F4B5;', label:'Entradas vari&#xE1;veis',      valor: entradasExtras,      pos: true,  color:'var(--green)'  },
+            { key:'gastosVariaveis',  emoji:'&#x1F4B8;', label:'Gastos vari&#xE1;veis',        valor: gastosVariaveis,     pos: false, color:'var(--red)'    },
+            { key:'custosJaPagos',    emoji:'&#x2705;',  label:'Custos fixos j&#xE1; pagos',   valor: custosJaPagos,       pos: false, color:'var(--red)'    },
+            { key:'custosFaltaPagar', emoji:'&#x1F4CB;', label:'Custos fixos a pagar',         valor: custosFaltaPagar,    pos: false, color:'var(--red)'    },
           ];
           return rows.map(r => {
             const on = _pt[r.key];
