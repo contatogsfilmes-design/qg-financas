@@ -1932,7 +1932,7 @@ function renderDashboard() {
   })();
   const totalCofrinhos = db.cofrinhos.reduce((a, c) => a + parseFloat(c.saldo || 0), 0);
 
-  const projecaoSobra = rendaFixaClientes - recebidoClientesMes - custosJaPagos - custosFaltaPagar;
+  const projecaoSobra = totalReceber + recebidoClientesMes - custosJaPagos - custosFaltaPagar;
 
   // Total em caixa = todos os bancos + dinheiro físico em mão
   const dinheiroFisico   = parseFloat(db.dinheiro_fisico || 0);
@@ -2028,20 +2028,20 @@ function renderDashboard() {
       <div class="card-title">&#x1F52E; PROJEC&#xC3;O FIM DO M&#xCA;S</div>
       <div style="display:grid;gap:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">&#x1F4BC; Valores fixos de clientes</span>
-          <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(rendaFixaClientes)}</span>
+          <span style="color:var(--text2);font-size:0.85rem">&#x1F4E5; Falta receber de clientes</span>
+          <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(totalReceber)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
           <span style="color:var(--text2);font-size:0.85rem">&#x1F4B0; J&#xE1; recebido de clientes</span>
-          <span style="color:var(--orange);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(recebidoClientesMes)}</span>
+          <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(recebidoClientesMes)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">&#x1F4CB; Custos fixos a pagar</span>
-          <span style="color:var(--red);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(custosFaltaPagar)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">&#x2705; Custos fixos j&#xE1; pagos</span>
+          <span style="color:var(--text2);font-size:0.85rem">&#x2705; Contas j&#xE1; pagas</span>
           <span style="color:var(--red);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(custosJaPagos)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
+          <span style="color:var(--text2);font-size:0.85rem">&#x1F4CB; Contas a pagar</span>
+          <span style="color:var(--red);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(custosFaltaPagar)}</span>
         </div>
         <div style="height:1px;background:var(--border2);margin:2px 0"></div>
 
