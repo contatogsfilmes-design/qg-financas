@@ -5174,22 +5174,25 @@ function renderClientesMensaisPorMes(mesBase) {
 function confirmarPagamentoMes(clienteId, mesRef) {
   const c = db.clientes.find(x=>x.id===clienteId);
   if (!c) return;
-  const valesP    = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
-  const valorLiq  = Math.max(0, parseFloat(c.valor_mensal||0) - valesP);
-  const mesProx   = _getMeses(mesRef, 2)[1];
+  const valesP       = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+  const valorLiq     = Math.max(0, parseFloat(c.valor_mensal||0) - valesP);
+  const recebidoNoMes = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesRef).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+  const valorRestante = Math.max(0, valorLiq - recebidoNoMes);
+  const mesProx      = _getMeses(mesRef, 2)[1];
 
   openModal(`✅ RECEBER — ${c.nome} (${_nomeMes(mesRef)})`, `
     <div style="padding:12px;background:var(--bg3);border-radius:var(--radius2);margin-bottom:14px">
       <div style="font-size:0.68rem;color:var(--text3);letter-spacing:2px">REFERÊNCIA</div>
       <div style="font-family:var(--font-head);font-size:1rem;color:var(--green);margin-top:4px">${_nomeMes(mesRef)}</div>
       ${valesP>0?`<div style="font-size:0.75rem;color:var(--orange);margin-top:4px">⚠️ Vales pendentes: −R$ ${fmtMoney(valesP)}</div>`:''}
+      ${recebidoNoMes>0?`<div style="font-size:0.75rem;color:var(--blue);margin-top:4px">⚡ Já recebido este mês: R$ ${fmtMoney(recebidoNoMes)} — falta R$ ${fmtMoney(valorRestante)}</div>`:''}
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Recebimento</label>
         <input type="date" class="form-control" id="cpmData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor Recebido (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="cpmValor" value="${valorLiq.toFixed(2)}">
+        <input type="number" step="0.01" class="form-control" id="cpmValor" value="${valorRestante.toFixed(2)}">
       </div>
     </div>
     <div class="form-group"><label class="form-label">Referência do Mês</label>
