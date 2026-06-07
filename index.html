@@ -2047,12 +2047,16 @@ function renderDashboard() {
           <span style="color:var(--green);font-family:var(--font-head)">+ R$ ${fmtMoney(recebidoClientesMes)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">&#x2705; Contas j&#xE1; pagas</span>
+          <span style="color:var(--text2);font-size:0.85rem">&#x2705; Contas fixas j&#xE1; pagas</span>
           <span style="color:var(--red);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(custosJaPagos)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg2);border-radius:var(--radius2)">
-          <span style="color:var(--text2);font-size:0.85rem">&#x1F4CB; Contas a pagar</span>
+          <span style="color:var(--text2);font-size:0.85rem">&#x1F4CB; Contas fixas a pagar</span>
           <span style="color:var(--red);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(custosFaltaPagar)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,152,0,0.07);border-radius:var(--radius2);border-left:3px solid var(--orange)">
+          <span style="color:var(--orange);font-size:0.85rem">&#x1F6D2; Gastos externos este m&#xEA;s</span>
+          <span style="color:var(--orange);font-family:var(--font-head)">&#x2212; R$ ${fmtMoney(gastosVariaveis)}</span>
         </div>
         <div style="height:1px;background:var(--border2);margin:2px 0"></div>
 
