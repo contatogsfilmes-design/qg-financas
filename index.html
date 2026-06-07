@@ -5737,8 +5737,10 @@ function viewCliente(id) {
 }
 
 function _viewClienteMensal(c) {
+  const mesAtual     = new Date().toISOString().substring(0,7);
   const totalVales   = c.vales.filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
-  const valorEfetivo = parseFloat(c.valor_mensal||0) - totalVales;
+  const recebidoMes  = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesAtual).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+  const valorEfetivo = Math.max(0, parseFloat(c.valor_mensal||0) - totalVales - recebidoMes);
   const extras       = c.extras_mensais || [];
   const totalExtras  = extras.reduce((a, e) => a + parseFloat(e.valor||0), 0);
   const totalGeral   = parseFloat(c.valor_mensal||0) + totalExtras;
