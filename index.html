@@ -7526,8 +7526,21 @@ function _buildJuliusContext() {
     ? gastosHoje.map(g => `  - ${g.descricao}: R$ ${fmtMoney(g.valor)} via ${g.nome_banco}`).join('\n')
     : '  (nenhum gasto hoje)';
 
-  const gastosMes = db.gastos.filter(g => g.data?.startsWith(mesAtual) && !g.emprestado);
-  const totalMes  = gastosMes.reduce((a,g) => a + parseFloat(g.valor||0), 0);
+  // Separar gastos fixos (vinculados a custos mensais) de gastos externos/variáveis
+  const _custoIds = new Set(db.custos_mensais.map(c => c.gasto_id).filter(Boolean));
+  const gastosMes          = db.gastos.filter(g => g.data?.startsWith(mesAtual) && !g.emprestado);
+  const gastosExternos     = gastosMes.filter(g => !_custoIds.has(g.id));
+  const gastosFixosPagos   = gastosMes.filter(g => _custoIds.has(g.id));
+  const totalGastosExt     = gastosExternos.reduce((a,g) => a + parseFloat(g.valor||0), 0);
+  const totalGastosFixPag  = gastosFixosPagos.reduce((a,g) => a + parseFloat(g.valor||0), 0);
+  const totalMes           = gastosMes.reduce((a,g) => a + parseFloat(g.valor||0), 0);
+
+  const gastosExtStr = gastosExternos.length
+    ? gastosExternos
+        .sort((a,b) => ((b.data||'')+(b.hora||'00:00')).localeCompare((a.data||'')+(a.hora||'00:00')))
+        .map(g => `  - [${g.data}] ${g.descricao}: R$ ${fmtMoney(g.valor)} (${g.nome_banco||g.tag||'—'})`)
+        .join('\n')
+    : '  (nenhum)';
 
   const ultimosStr = [...db.gastos]
     .sort((a,b) => ((b.data||'')+(b.hora||'00:00')).localeCompare((a.data||'')+(a.hora||'00:00')))
@@ -7539,8 +7552,29 @@ function _buildJuliusContext() {
     ? db.custos_mensais.map(c => `  - [id:${c.id}] ${c.nome}: R$ ${fmtMoney(c.valor)}, vence dia ${c.dia_vencimento} (${c.pago?'PAGO':'PENDENTE'})`).join('\n')
     : '  (nenhum)';
 
+  // Projeção fim do mês
+  const _totalReceber = db.clientes.reduce((tot, c) => {
+    if ((c.tipo_cobranca||'mensal') === 'mensal') {
+      const rec  = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesAtual).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+      const vPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+      tot += Math.max(0, parseFloat(c.valor_mensal||0) - vPend - rec);
+    } else if (c.tipo_cobranca==='freelance' && !c.freelance_pago) {
+      tot += parseFloat(c.valor_mensal||0);
+    }
+    return tot;
+  }, 0);
+  const _recebidoCli   = db.clientes.reduce((a,c) => a + (c.pagamentos||[]).filter(p=>(p.mes_referencia||p.data||'').substring(0,7)===mesAtual).reduce((b,p)=>b+parseFloat(p.valor||0),0), 0);
+  const _custosJaPagos = db.custos_mensais.filter(c=>c.pago).reduce((a,c)=>a+parseFloat(c.valor||0),0);
+  const _totalCustos   = db.custos_mensais.reduce((a,c)=>a+parseFloat(c.valor||0),0);
+  const _faltaPagar    = Math.max(0, _totalCustos - _custosJaPagos);
+  const _projecao      = _totalReceber + _recebidoCli - _custosJaPagos - _faltaPagar - totalGastosExt;
+
   const clientesStr = db.clientes.length
-    ? db.clientes.map(c => `  - ${c.nome}: R$ ${fmtMoney(c.valor_mensal)}/mês (${c.tipo_cobranca||'mensal'})`).join('\n')
+    ? db.clientes.map(c => {
+        const rec = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesAtual).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+        const status = rec >= parseFloat(c.valor_mensal||0)-0.01 ? 'PAGO' : rec > 0 ? `PARCIAL (recebido R$ ${fmtMoney(rec)}, falta R$ ${fmtMoney(parseFloat(c.valor_mensal||0)-rec)})` : 'PENDENTE';
+        return `  - ${c.nome}: R$ ${fmtMoney(c.valor_mensal)}/mês (${c.tipo_cobranca||'mensal'}) — ${status}`;
+      }).join('\n')
     : '  (nenhum)';
 
   const alertaSaldo = saldo < 1000
