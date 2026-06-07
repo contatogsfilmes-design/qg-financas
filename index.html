@@ -5229,8 +5229,13 @@ function _confirmarPagamentoMes(clienteId, mesBase) {
   const obs    = document.getElementById('cpmObs')?.value.trim()||'';
   if (!valor) return alert('Informe o valor recebido.');
 
-  // Quitar vales pendentes
-  (c.vales||[]).filter(v=>!v.quitado).forEach(v=>{v.quitado=true;v.data_quitado=data;});
+  // Quitar vales só se pagando o valor líquido completo (não em pagamento parcial)
+  const _valesP = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+  const _valorLiq = Math.max(0, parseFloat(c.valor_mensal||0) - _valesP);
+  const _recebidoAnte = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesRef).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+  if (valor + _recebidoAnte >= _valorLiq - 0.01) {
+    (c.vales||[]).filter(v=>!v.quitado).forEach(v=>{v.quitado=true;v.data_quitado=data;});
+  }
 
   // Registrar pagamento com mes_referencia
   c.pagamentos = c.pagamentos || [];
