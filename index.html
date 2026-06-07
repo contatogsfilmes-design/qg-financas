@@ -5781,8 +5781,11 @@ function _viewClienteMensal(c) {
         </div>
         <div style="font-size:1.2rem;color:var(--text3)">=</div>`:''}
         <div>
-          <div style="font-size:0.72rem;color:var(--green)">A RECEBER NO DIA ${c.dia_pagamento||'?'}</div>
-          <div style="font-family:var(--font-head);font-size:1.6rem;color:var(--green)">R$ ${fmtMoney(Math.max(0,valorEfetivo))}</div>
+          <div style="font-size:0.72rem;color:${recebidoMes>0?'var(--blue)':'var(--green)'}">
+            ${recebidoMes>0?`⚡ RESTANTE A RECEBER`:`A RECEBER NO DIA ${c.dia_pagamento||'?'}`}
+          </div>
+          <div style="font-family:var(--font-head);font-size:1.6rem;color:${recebidoMes>0?'var(--blue)':'var(--green)'}">R$ ${fmtMoney(Math.max(0,valorEfetivo))}</div>
+          ${recebidoMes>0?`<div style="font-size:0.72rem;color:var(--text3);margin-top:2px">✅ Já recebido: R$ ${fmtMoney(recebidoMes)}</div>`:''}
         </div>
       </div>`}
     </div>
