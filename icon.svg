@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softglow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="bggrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a1520;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#0f1117;stop-opacity:1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bggrad)"/>
+
+  <!-- Subtle border glow -->
+  <rect x="6" y="6" width="500" height="500" rx="91" fill="none" stroke="#00e676" stroke-width="5" opacity="0.22"/>
+  <rect x="14" y="14" width="484" height="484" rx="84" fill="none" stroke="#00e676" stroke-width="2" opacity="0.10"/>
+
+  <!-- QG text — main element -->
+  <text x="256" y="250"
+        text-anchor="middle"
+        dominant-baseline="central"
+        font-family="'Courier New', Courier, monospace"
+        font-weight="900"
+        font-size="260"
+        fill="#00e676"
+        filter="url(#glow)">QG</text>
+
+  <!-- Money bag — body (oval) -->
+  <ellipse cx="256" cy="415" rx="62" ry="54" fill="#00e676" filter="url(#softglow)"/>
+
+  <!-- Money bag — neck -->
+  <rect x="234" y="363" width="44" height="28" rx="11" fill="#00e676"/>
+
+  <!-- Money bag — knot (circle outline) -->
+  <circle cx="256" cy="355" r="17" fill="#0f1117" stroke="#00e676" stroke-width="7"/>
+
+  <!-- Dollar sign inside bag -->
+  <text x="256" y="420"
+        text-anchor="middle"
+        dominant-baseline="central"
+        font-family="'Courier New', Courier, monospace"
+        font-weight="900"
+        font-size="54"
+        fill="#0f1117">$</text>
+</svg>
