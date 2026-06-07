@@ -1943,7 +1943,7 @@ function renderDashboard() {
   })();
   const totalCofrinhos = db.cofrinhos.reduce((a, c) => a + parseFloat(c.saldo || 0), 0);
 
-  const projecaoSobra = totalReceber + recebidoClientesMes - custosJaPagos - custosFaltaPagar;
+  const projecaoSobra = totalReceber + recebidoClientesMes - custosJaPagos - custosFaltaPagar - gastosVariaveis;
 
   // Total em caixa = todos os bancos + dinheiro físico em mão
   const dinheiroFisico   = parseFloat(db.dinheiro_fisico || 0);
