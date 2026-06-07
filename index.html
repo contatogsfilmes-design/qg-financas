@@ -5002,10 +5002,7 @@ function renderClientesMensaisPorMes(mesBase) {
         aPagar += valMensal;
         pendentes.push(c);
       } else if (pago) {
-        // Paid month: vales already quitados during confirmation
-        const valesNoMes = (c.vales||[]).filter(v=>v.quitado && (v.data_quitado||'').substring(0,7)===mes)
-          .reduce((a,v)=>a+parseFloat(v.valor||0),0);
-        recebido += recPagamentos + valesNoMes;
+        recebido += recPagamentos;
       } else {
         // Current/past unpaid or partial: deduct active vales + already received
         const valesP = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
