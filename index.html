@@ -1827,8 +1827,9 @@ function renderMobileQuick() {
       <!-- Valor -->
       <div class="mq-valor-wrap">
         <span class="mq-valor-prefix">R$</span>
-        <input type="number" step="0.01" id="mqValor" class="${_mqModo==='gasto'?'modo-gasto':''}"
-          placeholder="0,00" inputmode="decimal"
+        <input type="tel" id="mqValor" class="${_mqModo==='gasto'?'modo-gasto':''}"
+          placeholder="0,00" inputmode="numeric"
+          oninput="mqFormatarValor(this)"
           onkeydown="if(event.key==='Enter'){_mqLancar();event.preventDefault()}">
       </div>
 
