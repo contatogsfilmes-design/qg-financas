@@ -8319,6 +8319,39 @@ function juliusKeydown(e) {
     <button id="julius-send" onclick="sendJuliusMessage()" title="Enviar">➤</button>
   </div>
 </div>
+<!-- Ícone PWA via canvas — roda no idle após app carregar, não bloqueia nada -->
+<script>
+(function(){
+  function drawQGIcon() {
+    try {
+      var S = 256, c = document.createElement('canvas');
+      c.width = c.height = S;
+      var x = c.getContext('2d');
+      if (!x) return;
+      function rr(px,py,pw,ph,r){x.beginPath();x.moveTo(px+r,py);x.arcTo(px+pw,py,px+pw,py+ph,r);x.arcTo(px+pw,py+ph,px,py+ph,r);x.arcTo(px,py+ph,px,py,r);x.arcTo(px,py,px+pw,py,r);x.closePath();}
+      rr(0,0,S,S,45); x.fillStyle='#0f1117'; x.fill();
+      rr(5,5,246,246,41); x.strokeStyle='#00e676'; x.lineWidth=3; x.globalAlpha=0.32; x.stroke(); x.globalAlpha=1;
+      x.fillStyle='#00e676'; x.textAlign='center'; x.textBaseline='middle';
+      var fs=100; x.font='900 '+fs+'px Orbitron,"Courier New",monospace';
+      while(x.measureText('QG').width>200&&fs>30){fs-=2;x.font='900 '+fs+'px Orbitron,"Courier New",monospace';}
+      x.fillText('QG',128,93);
+      x.globalAlpha=0.25; x.fillStyle='#00e676'; x.fillRect(28,155,200,1); x.globalAlpha=1;
+      x.font='85px serif'; x.textBaseline='middle'; x.fillText('💰',128,204);
+      var url=c.toDataURL('image/png');
+      var fi=document.getElementById('qg-favicon');
+      var ai=document.getElementById('qg-ati');
+      if(fi){fi.href=url;fi.type='image/png';}
+      if(ai)ai.href=url;
+    } catch(e){}
+  }
+  // Só roda quando o browser está ocioso, sem bloquear o app
+  if(window.requestIdleCallback){
+    requestIdleCallback(drawQGIcon, {timeout:5000});
+  } else {
+    setTimeout(drawQGIcon, 3000);
+  }
+})();
+</script>
 </body>
 </html>
 
