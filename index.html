@@ -1376,9 +1376,7 @@ function startApp() {
   _resetCustosMensaisSeNovomes();
   applyTheme(db.settings.theme);
   updateUserProfile();
-  // Usa screen.width como fallback — mais confiável em PWA standalone no iOS
-  var _isMobile = (window.innerWidth || screen.width) <= 760;
-  navigate(_isMobile ? 'mobile-quick' : 'dashboard');
+  navigate((window.innerWidth || screen.width) <= 760 ? 'mobile-quick' : 'dashboard');
   updateBadges();
   // Verificar se há comprovante compartilhado via PWA share target
   _checkPendingShare();
