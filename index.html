@@ -1894,7 +1894,8 @@ function _mqSelecionaBanco(id) {
 }
 
 function _mqLancar() {
-  const valor = parseFloat(document.getElementById('mqValor')?.value);
+  const valorStr = document.getElementById('mqValor')?.value || '';
+  const valor = parseFloat(valorStr.replace(/\./g, '').replace(',', '.')) || 0;
   const desc  = document.getElementById('mqDesc')?.value.trim();
   const data  = document.getElementById('mqData')?.value || today();
   if (!valor || valor <= 0) { document.getElementById('mqValor')?.focus(); return; }
