@@ -4209,8 +4209,8 @@ function _confirmarPagarParcela(id, idx) {
   c.parcelas_pagas = Math.max(c.parcelas_pagas || 0, idx + 1);
   c.data_pago = data;
   c.gasto_id  = gastoId;
-  // Se a parcela paga é a que estava pendente neste mês, marca o custo como pago no ciclo atual
-  if (idx === (c.parcelas_pagas - 1)) { c.pago = true; c.valor_atrasado = 0; }
+  c.pago = true;
+  c.valor_atrasado = 0;
 
   if (c.parcelas_pagas >= (c.parcelas_total || 1)) {
     saveData();
