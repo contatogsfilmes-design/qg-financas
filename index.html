@@ -4138,6 +4138,43 @@ function _toggleCustoTipo() {
   if (wrap) wrap.style.display = tipo === 'parcelado' ? 'block' : 'none';
 }
 
+function _renderChecklistParcelas(c) {
+  const total = c.parcelas_total || 2;
+  const pagas = c.parcelas_pagas || 0;
+  const itens = [];
+  for (let i = 0; i < total; i++) {
+    const paga = i < pagas;
+    itens.push(`
+      <div onclick="_toggleParcelaPaga('${c.id}', ${i})" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius2);cursor:pointer;background:${paga?'rgba(0,230,118,0.08)':'transparent'}">
+        <span style="font-size:1rem">${paga ? '✅' : '⬜'}</span>
+        <span style="font-size:0.8rem;color:${paga?'var(--text)':'var(--text3)'}">Parcela ${i + 1}/${total}</span>
+      </div>`);
+  }
+  return `
+    <div style="margin-bottom:8px">
+      <div style="font-size:0.7rem;color:var(--text3);letter-spacing:1px;margin-bottom:4px">PARCELAS PAGAS — clique pra corrigir</div>
+      <div style="max-height:200px;overflow-y:auto;background:var(--bg3);border-radius:var(--radius2);padding:4px">${itens.join('')}</div>
+    </div>`;
+}
+
+function _toggleParcelaPaga(id, idx) {
+  const c = db.custos_mensais.find(x => x.id === id);
+  if (!c) return;
+  const pagas = c.parcelas_pagas || 0;
+  c.parcelas_pagas = (idx < pagas) ? idx : idx + 1;
+  if (c.parcelas_pagas >= (c.parcelas_total || 1)) {
+    if (confirm('Todas as parcelas foram pagas. Encerrar esta conta parcelada?')) {
+      db.custos_mensais = db.custos_mensais.filter(x => x.id !== id);
+      saveData(); closeModal(); renderCustosTable();
+      return;
+    }
+    c.parcelas_pagas = (c.parcelas_total || 1) - 1;
+  }
+  saveData();
+  openAddCusto(id);
+  renderCustosTable();
+}
+
 function _limparAtrasoCusto(id) {
   if (!confirm('Limpar o valor atrasado desta conta? O atraso será zerado.')) return;
   const c = db.custos_mensais.find(x => x.id === id);
