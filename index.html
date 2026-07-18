@@ -3866,30 +3866,64 @@ function _addCustosPerfil() {
   renderCustos();
 }
 
+// ── Fatura de cartão de crédito como custo mensal automático ─────
+function _faturaAbertaCartao(cartaoId) {
+  return (db.cartao_compras || []).filter(c => c.cartao_id === cartaoId && !c.pago)
+    .reduce((a, c) => a + parseFloat(c.valor || 0) / (c.parcelas || 1), 0);
+}
+
+function _perfilDoCartao(card) {
+  const perfis = _getPerfis();
+  return perfis.includes(card.dono) ? card.dono : (perfis[0] || 'Eu');
+}
+
+function _faturasVirtuaisDoPerfil(perfil) {
+  return db.bancos_saldo.filter(b => b.tipo === 'credito' && _perfilDoCartao(b) === perfil)
+    .map(card => ({ isFatura: true, id: 'fatura_' + card.id, cartao_id: card.id,
+      nome: '💳 Fatura ' + card.nome, dia_vencimento: card.vencimento_fatura || null,
+      valor: _faturaAbertaCartao(card.id), pago: false, perfil }))
+    .filter(f => f.valor > 0.004);
+}
+
 function renderCustosTable() {
   const perfil = _custosPerfil;
   const mesAtual = new Date().toISOString().substring(0, 7);
-  const todos = db.custos_mensais.filter(c => (c.perfil || 'Eu') === perfil);
+  const faturas = _faturasVirtuaisDoPerfil(perfil);
+  const todos = [...db.custos_mensais.filter(c => (c.perfil || 'Eu') === perfil), ...faturas];
   // Ativos = nao aguardando (exclui custos cujo mes_inicio ainda nao chegou)
   const ativos = todos.filter(c => !(c.mes_inicio && mesAtual < c.mes_inicio));
   const total = ativos.reduce((a, c) => a + parseFloat(c.valor || 0) + parseFloat(c.valor_atrasado || 0), 0);
   const pagos = ativos.filter(c => c.pago).reduce((a, c) => a + parseFloat(c.valor || 0), 0);
   const isPrimario = perfil === (_getPerfis()[0] || 'Eu');
+  const aReceber = isPrimario ? _calcReceitaMes(mesAtual).total : null;
 
   document.getElementById('custosStats').innerHTML = `
     <div class="stat-card orange"><div class="stat-value">R$ ${fmtMoney(total)}</div><div class="stat-label">TOTAL MES — ${perfil.toUpperCase()}</div></div>
     <div class="stat-card"><div class="stat-value">R$ ${fmtMoney(pagos)}</div><div class="stat-label">PAGO ESTE MES</div></div>
     <div class="stat-card red"><div class="stat-value">R$ ${fmtMoney(total - pagos)}</div><div class="stat-label">A PAGAR</div></div>
     <div class="stat-card"><div class="stat-value">${todos.length}</div><div class="stat-label">CONTAS DE ${perfil.toUpperCase()}</div></div>
+    ${aReceber !== null ? `<div class="stat-card blue"><div class="stat-value">R$ ${fmtMoney(aReceber)}</div><div class="stat-label">📥 A RECEBER (CLIENTES + FREELAS)</div></div>` : ''}
   `;
   if (todos.length === 0) {
     document.getElementById('custosTable').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Nenhum custo fixo para ${perfil}</div><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openAddCusto()">+ Adicionar custo de ${perfil}</button></div>`;
     return;
   }
-  const sorted = [...todos].sort((a, b) => a.dia_vencimento - b.dia_vencimento);
+  const sorted = [...todos].sort((a, b) => (a.dia_vencimento||99) - (b.dia_vencimento||99));
   document.getElementById('custosTable').innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Nome</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead>
     <tbody>${sorted.map(c => {
+      if (c.isFatura) {
+        return `
+        <tr>
+          <td>${c.nome}<span style="display:block;font-size:0.68rem;color:var(--text3)">Fatura do cartão · gerada automaticamente</span></td>
+          <td>${c.dia_vencimento ? 'Dia '+c.dia_vencimento : '—'}</td>
+          <td class="amount-neg">R$ ${fmtMoney(c.valor)}</td>
+          <td><span class="tag tag-red">PENDENTE</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-outline btn-sm" onclick="pagarFatura('${c.cartao_id}')">💳 Pagar Fatura</button>
+          </td>
+        </tr>`;
+      }
       const atrasado = parseFloat(c.valor_atrasado || 0);
       const totalDevido = parseFloat(c.valor) + atrasado;
       return `
