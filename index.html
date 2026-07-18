@@ -2200,6 +2200,106 @@ function renderDashboard() {
   }, 100);
 }
 
+// ============================================================
+// PESQUISAR LANÇAMENTOS — busca por nome ou valor + comprovante
+// ============================================================
+let _dashSearchResults = [];
+
+function pesquisarLancamento() {
+  const raw = (document.getElementById('dashSearchInput')?.value || '').trim();
+  if (!raw) return;
+  const qText = raw.toLowerCase();
+  const qNum = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+  const isNum = !isNaN(qNum) && /[\d]/.test(raw);
+
+  const results = [];
+  db.gastos.forEach(g => {
+    if ((g.descricao||'').toLowerCase().includes(qText) || (isNum && Math.abs(parseFloat(g.valor||0)-qNum) < 0.01)) {
+      results.push({ tipo:'gasto', item:g });
+    }
+  });
+  (db.cartao_compras||[]).forEach(c => {
+    if ((c.descricao||'').toLowerCase().includes(qText) || (isNum && Math.abs(parseFloat(c.valor||0)-qNum) < 0.01)) {
+      results.push({ tipo:'compra_credito', item:c });
+    }
+  });
+  db.entradas_caixa.forEach(e => {
+    if ((e.descricao||'').toLowerCase().includes(qText) || (isNum && Math.abs(parseFloat(e.valor||0)-qNum) < 0.01)) {
+      results.push({ tipo:'entrada', item:e });
+    }
+  });
+
+  results.sort((a,b) => ((b.item.data||'')+(b.item.hora||'')).localeCompare((a.item.data||'')+(a.item.hora||'')));
+
+  if (results.length === 0) {
+    return openModal('🔍 PESQUISAR LANÇAMENTOS', `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">Nenhum lançamento encontrado para "${raw}"</div></div>`);
+  }
+  if (results.length === 1) return _abrirComprovante(results[0]);
+
+  _dashSearchResults = results;
+  openModal(`🔍 ${results.length} RESULTADOS PARA "${raw}"`, `
+    <div style="display:grid;gap:8px;max-height:60vh;overflow-y:auto">
+      ${results.map((r,i) => {
+        const it = r.item;
+        const cor = r.tipo==='entrada' ? 'var(--green)' : (r.tipo==='compra_credito' && !it.pago ? 'var(--orange)' : 'var(--red)');
+        const sinal = r.tipo==='entrada' ? '+' : '−';
+        return `<div onclick="_abrirComprovante(_dashSearchResults[${i}])"
+          style="padding:10px 12px;background:var(--bg3);border-radius:var(--radius2);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px"
+          onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='var(--bg3)'">
+          <div style="min-width:0">
+            <div style="font-size:0.85rem;color:var(--text)">${it.descricao||'—'}</div>
+            <div style="font-size:0.7rem;color:var(--text3)">${fmtDate(it.data)}</div>
+          </div>
+          <div style="font-family:var(--font-head);color:${cor};white-space:nowrap">${sinal} R$ ${fmtMoney(it.valor)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `);
+}
+
+function _abrirComprovante(r) {
+  const it = r.item;
+  let formaLabel = '—', formaIcon = '💵';
+
+  if (r.tipo === 'gasto') {
+    if (it.emprestado) { formaLabel = 'Dinheiro emprestado'; formaIcon = '🤝'; }
+    else if (it.forma === 'dinheiro') { formaLabel = 'Dinheiro em espécie'; formaIcon = '💵'; }
+    else if (it.forma === 'carteira') { formaLabel = 'Carteira física'; formaIcon = '👛'; }
+    else if (it.forma === 'credito') { formaLabel = (it.nome_banco||'Cartão') + ' — pagamento de fatura'; formaIcon = '💳'; }
+    else { formaLabel = it.nome_banco || 'Débito'; formaIcon = '🏦'; }
+  } else if (r.tipo === 'compra_credito') {
+    const card = db.bancos_saldo.find(b => b.id === it.cartao_id);
+    formaLabel = (card?.nome || 'Cartão') + (it.parcelas > 1 ? ` — parcela em ${it.parcelas}x` : ' — à vista')
+      + (it.pago ? ' · fatura já paga' : ' · fatura em aberto');
+    formaIcon = '💳';
+  } else if (r.tipo === 'entrada') {
+    formaLabel = it.nome_banco || it.forma || 'Entrada';
+    formaIcon = it.forma === 'PIX' ? '📲' : '💵';
+  }
+
+  const sinal = r.tipo === 'entrada' ? '+' : '−';
+  const cor = r.tipo === 'entrada' ? 'var(--green)' : (r.tipo==='compra_credito' && !it.pago ? 'var(--orange)' : 'var(--red)');
+
+  openModal('🧾 COMPROVANTE', `
+    <div style="text-align:center;padding:6px 0 18px">
+      <div style="font-size:2rem">${formaIcon}</div>
+      <div style="font-family:var(--font-head);font-size:1.6rem;color:${cor};margin-top:6px">${sinal} R$ ${fmtMoney(it.valor)}</div>
+      <div style="font-size:0.9rem;color:var(--text2);margin-top:4px">${it.descricao || '—'}</div>
+    </div>
+    <div style="display:grid;gap:8px">
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;background:var(--bg3);border-radius:var(--radius2)">
+        <span style="color:var(--text3);font-size:0.8rem">📅 Data</span>
+        <span style="font-size:0.85rem">${fmtDate(it.data)}${it.hora ? ' às ' + it.hora : ''}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 10px;background:var(--bg3);border-radius:var(--radius2)">
+        <span style="color:var(--text3);font-size:0.8rem">${formaIcon} Como foi pago</span>
+        <span style="font-size:0.85rem;text-align:right">${formaLabel}</span>
+      </div>
+      ${it.tag ? `<div style="display:flex;justify-content:space-between;padding:8px 10px;background:var(--bg3);border-radius:var(--radius2)"><span style="color:var(--text3);font-size:0.8rem">🏷️ Tag</span><span style="font-size:0.85rem">${it.tag}</span></div>` : ''}
+    </div>
+  `);
+}
+
 function renderHeatMap() {
   const today = new Date(); today.setHours(0,0,0,0);
   const items = [];
