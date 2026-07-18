@@ -3995,6 +3995,56 @@ function _faturasVirtuaisDoPerfil(perfil) {
     .filter(f => f.valor > 0.004);
 }
 
+// ── Mini-extrato de "A Receber" (clientes fixos + freelas pendentes) ──
+function abrirExtratoAReceber() {
+  const mesAtual = new Date().toISOString().substring(0, 7);
+  const itens = [];
+
+  db.clientes.forEach(c => {
+    const tipo = c.tipo_cobranca || 'mensal';
+    if (tipo === 'mensal') {
+      const recebidoMes = (c.pagamentos||[])
+        .filter(p => (p.mes_referencia||'').substring(0,7) === mesAtual)
+        .reduce((a, p) => a + parseFloat(p.valor||0), 0);
+      const valesPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+      const falta = Math.max(0, parseFloat(c.valor_mensal||0) - valesPend - recebidoMes);
+      if (falta > 0.004) {
+        itens.push({ nome: c.nome, valor: falta, dataLabel: c.dia_pagamento ? `Todo dia ${c.dia_pagamento}` : 'Sem data fixa', tipo: 'Mensal', parcial: recebidoMes > 0 });
+      }
+    } else if (tipo === 'freelance' && !c.freelance_pago) {
+      itens.push({ nome: c.nome, valor: parseFloat(c.valor_mensal||0), dataLabel: c.prazo_freelance ? `Prazo: ${fmtDate(c.prazo_freelance)}` : 'Sem prazo definido', tipo: 'Freela' });
+    }
+    (c.extras_mensais||[]).forEach(e => {
+      const recNoMes = (e.recebimentos||[]).some(r => r.mes === mesAtual);
+      if (!recNoMes) itens.push({ nome: `${c.nome} — ${e.descricao||'Extra'}`, valor: parseFloat(e.valor||0), dataLabel: e.dia ? `Todo dia ${e.dia}` : 'Sem data fixa', tipo: 'Extra' });
+    });
+  });
+
+  itens.sort((a,b) => b.valor - a.valor);
+  const total = itens.reduce((a,i) => a + i.valor, 0);
+
+  if (itens.length === 0) {
+    return openModal('📥 A RECEBER', `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Nada pendente de receber no momento</div></div>`);
+  }
+
+  openModal('📥 A RECEBER — DETALHAMENTO', `
+    <div style="display:grid;gap:8px;max-height:60vh;overflow-y:auto">
+      ${itens.map(i => `
+        <div style="padding:10px 12px;background:var(--bg3);border-radius:var(--radius2);display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="min-width:0">
+            <div style="font-size:0.85rem;color:var(--text)">${i.nome} ${i.parcial ? '<span style="color:var(--blue);font-size:0.7rem">(parcial)</span>' : ''}</div>
+            <div style="font-size:0.7rem;color:var(--text3)">${i.tipo} · ${i.dataLabel}</div>
+          </div>
+          <div style="font-family:var(--font-head);color:var(--blue);white-space:nowrap">R$ ${fmtMoney(i.valor)}</div>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;margin-top:10px;border-top:1px solid var(--border2)">
+      <span style="color:var(--text2);font-size:0.85rem">Total a receber</span>
+      <span style="font-family:var(--font-head);font-size:1.1rem;color:var(--blue)">R$ ${fmtMoney(total)}</span>
+    </div>
+  `);
+}
+
 function renderCustosTable() {
   const perfil = _custosPerfil;
   const mesAtual = new Date().toISOString().substring(0, 7);
