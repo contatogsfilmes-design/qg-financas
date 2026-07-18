@@ -4012,7 +4012,7 @@ function renderCustosTable() {
     <div class="stat-card"><div class="stat-value">R$ ${fmtMoney(pagos)}</div><div class="stat-label">PAGO ESTE MES</div></div>
     <div class="stat-card red"><div class="stat-value">R$ ${fmtMoney(total - pagos)}</div><div class="stat-label">A PAGAR</div></div>
     <div class="stat-card"><div class="stat-value">${todos.length}</div><div class="stat-label">CONTAS DE ${perfil.toUpperCase()}</div></div>
-    ${aReceber !== null ? `<div class="stat-card blue"><div class="stat-value">R$ ${fmtMoney(aReceber)}</div><div class="stat-label">📥 A RECEBER (CLIENTES + FREELAS)</div></div>` : ''}
+    ${aReceber !== null ? `<div class="stat-card blue" onclick="abrirExtratoAReceber()" style="cursor:pointer" title="Ver detalhamento"><div class="stat-value">R$ ${fmtMoney(aReceber)}</div><div class="stat-label">📥 A RECEBER (CLIENTES + FREELAS)</div></div>` : ''}
   `;
   if (todos.length === 0) {
     document.getElementById('custosTable').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Nenhum custo fixo para ${perfil}</div><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="openAddCusto()">+ Adicionar custo de ${perfil}</button></div>`;
