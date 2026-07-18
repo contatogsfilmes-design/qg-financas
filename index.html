@@ -3745,6 +3745,16 @@ function saveGasto(id) {
   closeModal(); saveData(); updateBadges(); renderGastosTable();
 }
 
+// ── Compra no crédito lançada pelo Novo Gasto (sempre à vista) ───
+function _saveGastoComoCompraCredito(forma_raw, data, valor, descricao, tag) {
+  const cartao_id = forma_raw.slice(5);
+  if (!db.cartao_compras) db.cartao_compras = [];
+  db.cartao_compras.push({ id: uid(), cartao_id, data, valor, descricao, parcelas: 1, tag, pago: false });
+  const card = db.bancos_saldo.find(b => b.id === cartao_id);
+  if (card) card.limite_usado = (parseFloat(card.limite_usado || 0)) + valor;
+  closeModal(); saveData(); updateBadges(); renderGastosTable();
+}
+
 // ── Helper: debitar da conta certa ───────────────────────────────
 function _debitarConta(forma_raw, banco_id, valor) {
   if (forma_raw === 'dinheiro' || forma_raw === 'carteira') {
