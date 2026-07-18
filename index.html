@@ -1916,7 +1916,7 @@ function _mqLancar() {
     const formaRaw = _mqBanco;
     if (formaRaw?.startsWith('cred_')) {
       // Compra no crédito: cai direto na fatura do cartão, não debita conta nem vira "gasto"
-      _saveGastoComoCompraCredito(formaRaw, data, valor, desc, _mqTag || '');
+      _registrarCompraCredito(formaRaw.slice(5), data, valor, desc, _mqTag || '');
     } else {
       let forma = 'debito', banco_id = null, nome_banco = '💵 Dinheiro';
       if (formaRaw === 'dinheiro') { forma = 'dinheiro'; }
