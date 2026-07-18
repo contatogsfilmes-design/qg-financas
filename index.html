@@ -3675,6 +3675,11 @@ function saveGasto(id) {
 
   const isEmprestado = forma_raw === 'emprestado';
 
+  // ── Cartão de crédito: vira compra na fatura, não debita saldo ──
+  if (!id && forma_raw.startsWith('cred_')) {
+    return _saveGastoComoCompraCredito(forma_raw, data, valor, descricao, tag);
+  }
+
   // ── Resolve banco_id e nome_banco ────────────────────────────
   let forma = 'dinheiro', banco_id = null, nome_banco = '💵 Dinheiro';
   if (!isEmprestado) {
