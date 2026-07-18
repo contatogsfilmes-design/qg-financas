@@ -7125,7 +7125,8 @@ function confirmarPagamentoFatura(cartaoId) {
     descricao:`Fatura ${card?.nome||'cartão'}`, tag:'Cartão de crédito',
     forma, banco_id, nome_banco, forma_raw, emprestado:false, pend_id:null, obs:'' });
 
-  closeModal(); saveData(); renderCartoes();
+  closeModal(); saveData(); updateBadges();
+  if (currentPage === 'custos') renderCustos(); else renderCartoes();
 }
 
 // ============================================================
