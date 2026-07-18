@@ -3748,12 +3748,16 @@ function saveGasto(id) {
 }
 
 // ── Compra no crédito lançada pelo Novo Gasto (sempre à vista) ───
-function _saveGastoComoCompraCredito(forma_raw, data, valor, descricao, tag) {
-  const cartao_id = forma_raw.slice(5);
+// Registra a compra na fatura do cartão em vez de debitar saldo. Não mexe em DOM/render.
+function _registrarCompraCredito(cartao_id, data, valor, descricao, tag) {
   if (!db.cartao_compras) db.cartao_compras = [];
   db.cartao_compras.push({ id: uid(), cartao_id, data, valor, descricao, parcelas: 1, tag, pago: false });
   const card = db.bancos_saldo.find(b => b.id === cartao_id);
   if (card) card.limite_usado = (parseFloat(card.limite_usado || 0)) + valor;
+}
+
+function _saveGastoComoCompraCredito(forma_raw, data, valor, descricao, tag) {
+  _registrarCompraCredito(forma_raw.slice(5), data, valor, descricao, tag);
   closeModal(); saveData(); updateBadges(); renderGastosTable();
 }
 
