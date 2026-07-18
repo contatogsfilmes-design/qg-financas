@@ -1914,17 +1914,19 @@ function _mqLancar() {
 
   if (_mqModo === 'gasto') {
     const formaRaw = _mqBanco;
-    let forma = 'debito', banco_id = null, nome_banco = '💵 Dinheiro';
-    if (formaRaw === 'dinheiro') { forma = 'dinheiro'; }
-    else if (formaRaw?.startsWith('cred_')) {
-      forma = 'credito'; banco_id = formaRaw.slice(5);
-      nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
+    if (formaRaw?.startsWith('cred_')) {
+      // Compra no crédito: cai direto na fatura do cartão, não debita conta nem vira "gasto"
+      _saveGastoComoCompraCredito(formaRaw, data, valor, desc, _mqTag || '');
     } else {
-      forma = 'debito'; banco_id = formaRaw;
-      nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
+      let forma = 'debito', banco_id = null, nome_banco = '💵 Dinheiro';
+      if (formaRaw === 'dinheiro') { forma = 'dinheiro'; }
+      else {
+        forma = 'debito'; banco_id = formaRaw;
+        nome_banco = db.bancos_saldo.find(b => b.id === banco_id)?.nome || '';
+      }
+      _debitarConta(formaRaw, banco_id, valor);
+      db.gastos.push({ id: uid(), data, hora, valor, descricao: desc, tag: _mqTag || '', forma, banco_id, nome_banco, forma_raw: formaRaw, emprestado: false, pend_id: null, motivo_emprestimo: '' });
     }
-    _debitarConta(formaRaw, banco_id, valor);
-    db.gastos.push({ id: uid(), data, hora, valor, descricao: desc, tag: _mqTag || '', forma, banco_id, nome_banco, forma_raw: formaRaw, emprestado: false, pend_id: null, motivo_emprestimo: '' });
   } else {
     _persistEntrada({ data, hora, valor, descricao: desc, categoria: 'Recebimento', forma: 'PIX', bancoId: _mqBanco === 'dinheiro' ? 'dinheiro' : _mqBanco, obs: '' });
   }
