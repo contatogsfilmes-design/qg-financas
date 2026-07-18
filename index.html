@@ -2058,6 +2058,16 @@ function renderDashboard() {
       </div>
     </div>
 
+    <!-- PESQUISAR LANÇAMENTOS -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">🔍 PESQUISAR LANÇAMENTOS</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="dashSearchInput" class="form-control" placeholder="Nome ou valor... Ex: Uber, Mercado, 45,90"
+          style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();pesquisarLancamento();}">
+        <button class="btn btn-primary" onclick="pesquisarLancamento()">Buscar</button>
+      </div>
+    </div>
+
     <!-- DINHEIRO FÍSICO + BANCOS ROW -->
     <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;align-items:stretch">
 
