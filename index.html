@@ -4530,6 +4530,15 @@ function toggleCusto(id) {
       }
       c.gasto_id = null;
     }
+    if (isPrimario && c.cartao_compra_id) {
+      const compra = (db.cartao_compras || []).find(x => x.id === c.cartao_compra_id);
+      if (compra) {
+        const card = db.bancos_saldo.find(b => b.id === compra.cartao_id);
+        if (card) card.limite_usado = Math.max(0, parseFloat(card.limite_usado || 0) - parseFloat(compra.valor || 0));
+        db.cartao_compras = db.cartao_compras.filter(x => x.id !== c.cartao_compra_id);
+      }
+      c.cartao_compra_id = null;
+    }
     c.pago = false;
     saveData(); renderCustosTable();
     return;
