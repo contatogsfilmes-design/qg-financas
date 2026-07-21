@@ -1721,8 +1721,9 @@ function heatWidth(daysLeft, maxDays = 30) {
 // DASHBOARD
 // ============================================================
 function calcTotalCaixa() {
-  // All bank accounts + physical cash (dinheiro em espécie)
-  const bancos  = db.bancos_saldo.reduce((a, b) => a + parseFloat(b.saldo || 0), 0);
+  // Dinheiro real: contas débito/carteira + físico. Cartão de crédito não entra
+  // (saldo dele é limite disponível, não dinheiro que você tem).
+  const bancos  = db.bancos_saldo.filter(b => b.tipo !== 'credito').reduce((a, b) => a + parseFloat(b.saldo || 0), 0);
   const fisico  = parseFloat(db.dinheiro_fisico || 0);
   return bancos + fisico;
 }
