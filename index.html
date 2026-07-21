@@ -2104,7 +2104,7 @@ function renderDashboard() {
         return `
         <div onclick="abrirExtratoBanco('${b.id}')" style="flex-shrink:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:12px 16px;min-width:155px;border-top:3px solid ${b.cor||'var(--green)'};cursor:pointer;transition:all .2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
           <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase">${b.tipo==='carteira'?'👛':isCred?'💳':'🏦'} ${b.nome}</div>
-          <div style="font-family:var(--font-head);font-size:1.2rem;color:${isCred?(b.cor||'var(--green)'):(b.cor||'var(--green)')};margin:4px 0">R$ ${fmtMoney(valorExibido)}</div>
+          <div style="font-family:var(--font-head);font-size:1.2rem;color:${b.cor||'var(--green)'};margin:4px 0">R$ ${fmtMoney(valorExibido)}</div>
           ${isCred ? `<div style="font-size:0.65rem;color:var(--text3)">limite disponível</div>` : (b.finalidade ? `<div style="font-size:0.65rem;color:var(--text3)">${b.finalidade}</div>` : `<div style="font-size:0.65rem;color:var(--text3)">${b.tipo||'débito'}</div>`)}
           <div style="font-size:0.6rem;color:var(--text3);margin-top:4px">👆 ver extrato</div>
         </div>
