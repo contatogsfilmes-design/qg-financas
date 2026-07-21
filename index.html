@@ -1721,9 +1721,10 @@ function heatWidth(daysLeft, maxDays = 30) {
 // DASHBOARD
 // ============================================================
 function calcTotalCaixa() {
-  // Dinheiro real: contas débito/carteira + físico. Cartão de crédito não entra
-  // (saldo dele é limite disponível, não dinheiro que você tem).
-  const bancos  = db.bancos_saldo.filter(b => b.tipo !== 'credito').reduce((a, b) => a + parseFloat(b.saldo || 0), 0);
+  // Dinheiro real disponível: contas débito/carteira + físico. Cartão de crédito não entra
+  // (saldo dele é limite disponível, não dinheiro que você tem). Conta negativa (estourada)
+  // conta como R$0 disponível — não pode puxar o total pra baixo nem virar "saldo negativo somado".
+  const bancos  = db.bancos_saldo.filter(b => b.tipo !== 'credito').reduce((a, b) => a + Math.max(0, parseFloat(b.saldo || 0)), 0);
   const fisico  = parseFloat(db.dinheiro_fisico || 0);
   return bancos + fisico;
 }
