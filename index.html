@@ -4589,7 +4589,10 @@ function toggleCusto(id) {
       const compra = (db.cartao_compras || []).find(x => x.id === c.cartao_compra_id);
       if (compra) {
         const card = db.bancos_saldo.find(b => b.id === compra.cartao_id);
-        if (card) card.limite_usado = Math.max(0, parseFloat(card.limite_usado || 0) - parseFloat(compra.valor || 0));
+        if (card) {
+          card.limite_usado = Math.max(0, parseFloat(card.limite_usado || 0) - parseFloat(compra.valor || 0));
+          card.saldo = parseFloat(card.saldo || 0) + parseFloat(compra.valor || 0);
+        }
         db.cartao_compras = db.cartao_compras.filter(x => x.id !== c.cartao_compra_id);
       }
       c.cartao_compra_id = null;
