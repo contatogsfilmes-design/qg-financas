@@ -4600,23 +4600,31 @@ function _confirmarPagCusto(id) {
 
   const { forma, banco_id, nome_banco } = _parseFormaGasto(forma_raw);
 
-  // Debit bank
-  if (banco_id) {
-    const banco = db.bancos_saldo.find(b => b.id === banco_id);
-    if (banco) banco.saldo = parseFloat(banco.saldo || 0) - valor;
+  if (forma === 'credito') {
+    // Cartão de crédito: vira compra na fatura do cartão, não debita saldo nem vira "gasto"
+    _registrarCompraCredito(banco_id, data, valor, `Custo fixo: ${c.nome}`, 'Custo fixo');
+    c.pago = true;
+    c.data_pago = data;
+    c.gasto_id = null;
+  } else {
+    // Debit bank
+    if (banco_id) {
+      const banco = db.bancos_saldo.find(b => b.id === banco_id);
+      if (banco) banco.saldo = parseFloat(banco.saldo || 0) - valor;
+    }
+
+    // Create gasto
+    const gastoId = uid();
+    db.gastos.push({
+      id: gastoId, data, hora: new Date().toTimeString().substring(0,5), valor,
+      descricao: `Custo fixo: ${c.nome}`, tag: 'Custo fixo',
+      forma, banco_id, nome_banco, forma_raw, emprestado: false, pend_id: null, obs: ''
+    });
+
+    c.pago = true;
+    c.data_pago = data;
+    c.gasto_id  = gastoId;
   }
-
-  // Create gasto
-  const gastoId = uid();
-  db.gastos.push({
-    id: gastoId, data, hora: new Date().toTimeString().substring(0,5), valor,
-    descricao: `Custo fixo: ${c.nome}`, tag: 'Custo fixo',
-    forma, banco_id, nome_banco, forma_raw, emprestado: false, pend_id: null, obs: ''
-  });
-
-  c.pago = true;
-  c.data_pago = data;
-  c.gasto_id  = gastoId;
 
   closeModal(); saveData(); renderCustosTable();
 }
