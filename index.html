@@ -2593,6 +2593,61 @@ function _abrirExtratoCartaoCredito(cartaoId) {
   `, true);
 }
 
+// ─── Marcar uma compra específica do cartão como paga ────────
+function marcarCompraCreditoPaga(compraId) {
+  const c = (db.cartao_compras || []).find(x => x.id === compraId);
+  if (!c) return;
+  openModal(`✅ MARCAR COMO PAGA — ${c.descricao}`, `
+    <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px">
+      Valor: <strong style="color:var(--orange)">R$ ${fmtMoney(c.valor)}</strong>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Data do Pagamento</label>
+      <input type="date" class="form-control" id="mcpData" value="${today()}">
+    </div>
+    ${_formaGastoHtml('mcp')}
+    <div style="background:rgba(255,152,0,0.06);border:1px solid var(--orange);border-radius:var(--radius2);padding:10px;margin-top:10px;font-size:0.78rem;color:var(--text2)">
+      💡 Isso só libera o limite do cartão e some da fatura em aberto. Escolha "debitar conta" se realmente saiu dinheiro de algum lugar, ou "só marcar" se só quer registrar que já pagou.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-primary" style="flex:1" onclick="_confirmarCompraCreditoPaga('${compraId}', true)">✅ Paguei agora — debitar conta</button>
+      <button class="btn btn-outline" style="flex:1;border-color:var(--green);color:var(--green)" onclick="_confirmarCompraCreditoPaga('${compraId}', false)">📝 Só marcar (não debitar)</button>
+    </div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="closeModal()">Cancelar</button>
+  `);
+}
+
+function _confirmarCompraCreditoPaga(compraId, debitar) {
+  const c = (db.cartao_compras || []).find(x => x.id === compraId);
+  if (!c) return;
+  const data = document.getElementById('mcpData').value;
+  const card = db.bancos_saldo.find(b => b.id === c.cartao_id);
+
+  if (debitar) {
+    const forma_raw = document.getElementById('mcpForma').value;
+    const { forma, banco_id, nome_banco } = _parseFormaGasto(forma_raw);
+    if (forma === 'credito') {
+      // Pagou com outro cartão de crédito → vira compra na fatura desse outro cartão
+      _registrarCompraCredito(banco_id, data, c.valor, `Pagamento fatura: ${c.descricao}`, 'Cartão de crédito');
+    } else {
+      _debitarConta(forma_raw, banco_id, c.valor);
+      db.gastos.push({ id: uid(), data, hora: new Date().toTimeString().substring(0,5), valor: c.valor,
+        descricao: `Pagamento fatura: ${c.descricao}`, tag: 'Cartão de crédito',
+        forma, banco_id, nome_banco, forma_raw, emprestado: false, pend_id: null, obs: '' });
+    }
+  }
+
+  c.pago = true;
+  c.data_pago = data;
+  if (card) {
+    card.limite_usado = Math.max(0, parseFloat(card.limite_usado || 0) - parseFloat(c.valor || 0));
+    card.saldo = parseFloat(card.saldo || 0) + parseFloat(c.valor || 0);
+  }
+
+  closeModal(); saveData(); updateBadges();
+  _abrirExtratoCartaoCredito(c.cartao_id);
+}
+
 // ─── AJUSTE DE SALDO ─────────────────────────────────────────
 function ajustarSaldoBanco(bancoId) {
   const b = db.bancos_saldo.find(x => x.id === bancoId);
