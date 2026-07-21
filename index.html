@@ -2527,6 +2527,51 @@ function abrirExtratoBanco(bancoId) {
   `, true);
 }
 
+// ─── Extrato de cartão de crédito — usa cartao_compras, não gastos ──
+function _abrirExtratoCartaoCredito(cartaoId) {
+  const card = db.bancos_saldo.find(x => x.id === cartaoId);
+  if (!card) return;
+  const compras = (db.cartao_compras || []).filter(c => c.cartao_id === cartaoId)
+    .sort((a,b) => (b.data||'').localeCompare(a.data||''));
+  const faturaAberta = _faturaAbertaCartao(cartaoId);
+  const limite = parseFloat(card.limite||0);
+  const limiteUsado = parseFloat(card.limite_usado||0);
+
+  openModal(`💳 EXTRATO — ${card.nome}`, `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 16px;flex:1;min-width:130px">
+        <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px">FATURA EM ABERTO</div>
+        <div style="font-family:var(--font-head);font-size:1.3rem;color:var(--orange)">R$ ${fmtMoney(faturaAberta)}</div>
+      </div>
+      ${limite>0?`<div style="background:var(--bg3);border-radius:var(--radius2);padding:10px 12px">
+        <div style="font-size:0.62rem;color:var(--text3)">LIMITE USADO</div>
+        <div style="font-family:var(--font-head);color:var(--text2);font-size:0.95rem">R$ ${fmtMoney(limiteUsado)} / R$ ${fmtMoney(limite)}</div>
+      </div>`:''}
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none;flex:1" onclick="closeModal();openLancarCompraCredito('${cartaoId}')">🛒 + Compra</button>
+      <button class="btn btn-sm btn-outline" style="flex:1" onclick="closeModal();pagarFatura('${cartaoId}')">💳 Pagar Fatura</button>
+    </div>
+    <div style="max-height:380px;overflow-y:auto">
+      ${compras.length===0
+        ? '<div class="empty-state"><div class="empty-text">Nenhuma compra nesta conta</div></div>'
+        : compras.map(c => `
+          <div class="extrato-card gasto" style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <div style="font-size:0.9rem;font-weight:600;color:var(--text)">${c.descricao || '—'}</div>
+              <div class="extrato-valor neg" style="font-size:0.95rem">− R$ ${fmtMoney(c.valor)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">
+              <span style="font-size:0.68rem;color:var(--text3)">${fmtDate(c.data)}</span>
+              ${c.parcelas>1?`<span class="extrato-badge">${c.parcelas}x</span>`:''}
+              ${c.tag?`<span class="extrato-badge">${c.tag}</span>`:''}
+              ${c.pago?'<span class="tag tag-green">PAGO</span>':'<span class="tag tag-gray">EM ABERTO</span>'}
+            </div>
+          </div>`).join('')}
+    </div>
+  `, true);
+}
+
 // ─── AJUSTE DE SALDO ─────────────────────────────────────────
 function ajustarSaldoBanco(bancoId) {
   const b = db.bancos_saldo.find(x => x.id === bancoId);
