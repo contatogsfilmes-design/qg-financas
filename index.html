@@ -1373,6 +1373,7 @@ function startApp() {
   }
   if (db.dinheiro_fisico === undefined) db.dinheiro_fisico = 0;
   if (!db.cofrinhos) db.cofrinhos = [];
+  _migrarSaldoCartaoCredito();
   _resetCustosMensaisSeNovomes();
   applyTheme(db.settings.theme);
   updateUserProfile();
