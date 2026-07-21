@@ -3933,7 +3933,10 @@ function _registrarCompraCredito(cartao_id, data, valor, descricao, tag) {
   const compra = { id: uid(), cartao_id, data, valor, descricao, parcelas: 1, tag, pago: false };
   db.cartao_compras.push(compra);
   const card = db.bancos_saldo.find(b => b.id === cartao_id);
-  if (card) card.limite_usado = (parseFloat(card.limite_usado || 0)) + valor;
+  if (card) {
+    card.limite_usado = (parseFloat(card.limite_usado || 0)) + valor;
+    card.saldo = parseFloat(card.saldo || 0) - valor;
+  }
   return compra.id;
 }
 
