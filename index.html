@@ -2483,6 +2483,8 @@ function abrirExtratoBanco(bancoId) {
   const b = db.bancos_saldo.find(x => x.id === bancoId);
   if (!b) return;
 
+  if (b.tipo === 'credito') return _abrirExtratoCartaoCredito(bancoId);
+
   // Collect all movements related to this bank
   const movs = [
     ...db.entradas_caixa.filter(e => e.banco_id === bancoId).map(e => ({ ...e, _tipo: 'entrada' })),
