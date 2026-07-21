@@ -2586,6 +2586,7 @@ function _abrirExtratoCartaoCredito(cartaoId) {
               ${c.parcelas>1?`<span class="extrato-badge">${c.parcelas}x</span>`:''}
               ${c.tag?`<span class="extrato-badge">${c.tag}</span>`:''}
               ${c.pago?'<span class="tag tag-green">PAGO</span>':'<span class="tag tag-gray">EM ABERTO</span>'}
+              ${!c.pago?`<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.68rem;margin-left:auto" onclick="marcarCompraCreditoPaga('${c.id}')">✅ Marcar paga</button>`:''}
             </div>
           </div>`).join('')}
     </div>
