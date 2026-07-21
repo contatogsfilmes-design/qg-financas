@@ -1363,6 +1363,24 @@ function uploadBackupClick() {
 // ============================================================
 // APP START / AUTH STATE
 // ============================================================
+
+// Migração one-shot: antes de hoje, "saldo" do cartão de crédito não descontava
+// com as compras já lançadas (bug corrigido). Recalcula com base no que já
+// está registrado em limite_usado, pra sincronizar sem precisar editar manual.
+function _migrarSaldoCartaoCredito() {
+  if (db.settings.credito_saldo_migrado) return;
+  let alterou = false;
+  (db.bancos_saldo || []).forEach(b => {
+    if (b.tipo !== 'credito') return;
+    const limite = parseFloat(b.limite || 0);
+    if (limite <= 0) return; // sem limite cadastrado, nada pra recalcular
+    b.saldo = limite - parseFloat(b.limite_usado || 0);
+    alterou = true;
+  });
+  db.settings.credito_saldo_migrado = true;
+  if (alterou) saveData();
+}
+
 function startApp() {
   document.getElementById('startup').style.display = 'none';
   document.getElementById('app').classList.add('visible');
