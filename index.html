@@ -2097,14 +2097,17 @@ function renderDashboard() {
       </div>
 
       <!-- BANCOS — clicáveis para ver extrato -->
-      ${db.bancos_saldo.map(b => `
+      ${db.bancos_saldo.map(b => {
+        const isCred = b.tipo === 'credito';
+        const valorExibido = isCred ? _faturaAbertaCartao(b.id) : b.saldo;
+        return `
         <div onclick="abrirExtratoBanco('${b.id}')" style="flex-shrink:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:12px 16px;min-width:155px;border-top:3px solid ${b.cor||'var(--green)'};cursor:pointer;transition:all .2s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
-          <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase">${b.tipo==='carteira'?'👛':b.tipo==='credito'?'💳':'🏦'} ${b.nome}</div>
-          <div style="font-family:var(--font-head);font-size:1.2rem;color:${b.tipo==='credito'?'var(--orange)':(b.cor||'var(--green)')};margin:4px 0">R$ ${fmtMoney(b.saldo)}</div>
-          ${b.finalidade ? `<div style="font-size:0.65rem;color:var(--text3)">${b.finalidade}</div>` : `<div style="font-size:0.65rem;color:var(--text3)">${b.tipo||'débito'}</div>`}
+          <div style="font-size:0.62rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase">${b.tipo==='carteira'?'👛':isCred?'💳':'🏦'} ${b.nome}</div>
+          <div style="font-family:var(--font-head);font-size:1.2rem;color:${isCred?'var(--orange)':(b.cor||'var(--green)')};margin:4px 0">R$ ${fmtMoney(valorExibido)}</div>
+          ${isCred ? `<div style="font-size:0.65rem;color:var(--text3)">fatura aberta</div>` : (b.finalidade ? `<div style="font-size:0.65rem;color:var(--text3)">${b.finalidade}</div>` : `<div style="font-size:0.65rem;color:var(--text3)">${b.tipo||'débito'}</div>`)}
           <div style="font-size:0.6rem;color:var(--text3);margin-top:4px">👆 ver extrato</div>
         </div>
-      `).join('')}
+      `;}).join('')}
 
       <!-- + Nova conta -->
       <div onclick="navigate('cartoes')" style="flex-shrink:0;background:transparent;border:1px dashed var(--border);border-radius:var(--radius2);padding:12px 16px;min-width:100px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transition:all .2s;color:var(--text3)" onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseout="this.style.borderColor='';this.style.color='var(--text3)'">
