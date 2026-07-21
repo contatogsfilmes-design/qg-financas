@@ -4604,7 +4604,7 @@ function _confirmarPagCusto(id) {
 
   if (forma === 'credito') {
     // Cartão de crédito: vira compra na fatura do cartão, não debita saldo nem vira "gasto"
-    _registrarCompraCredito(banco_id, data, valor, `Custo fixo: ${c.nome}`, 'Custo fixo');
+    c.cartao_compra_id = _registrarCompraCredito(banco_id, data, valor, `Custo fixo: ${c.nome}`, 'Custo fixo');
     c.pago = true;
     c.data_pago = data;
     c.gasto_id = null;
