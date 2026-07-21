@@ -1721,7 +1721,7 @@ function editDinheiroFisico() {
     </div>
     <div style="font-size:0.72rem;color:var(--text3);margin-bottom:8px">Valor atual: <strong style="color:var(--yellow)">R$ ${fmtMoney(atual)}</strong></div>
     <div class="form-group"><label class="form-label">Valor em Espécie (R$)</label>
-      <input type="number" step="0.01" class="form-control" id="dfValor" value="${atual}" style="font-size:1.2rem;text-align:center;font-family:var(--font-head);color:var(--yellow)">
+      <input type="text" inputmode="decimal" class="form-control" id="dfValor" value="${fmtValorMask(atual)}" style="font-size:1.2rem;text-align:center;font-family:var(--font-head);color:var(--yellow)" oninput="formatarValorInput(this)">
     </div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-primary" onclick="salvarDinheiroFisico()">💾 Salvar</button>
@@ -1731,7 +1731,7 @@ function editDinheiroFisico() {
 }
 
 function salvarDinheiroFisico() {
-  db.dinheiro_fisico = parseFloat(document.getElementById('dfValor').value) || 0;
+  db.dinheiro_fisico = valorNum('dfValor');
   closeModal(); saveData(); renderDashboard();
 }
 
@@ -2534,7 +2534,7 @@ function ajustarSaldoBanco(bancoId) {
     <div style="font-size:0.78rem;color:var(--text3);margin-bottom:8px">Saldo atual no app: <strong style="color:${b.saldo<0?'var(--red)':'var(--green)'}">R$ ${fmtMoney(b.saldo)}</strong></div>
     <div class="form-group">
       <label class="form-label">Saldo Real (conforme extrato do banco)</label>
-      <input type="number" step="0.01" class="form-control" id="ajSaldo" value="${b.saldo.toFixed(2)}" style="font-family:var(--font-head);font-size:1.1rem;color:var(--green)">
+      <input type="text" inputmode="decimal" class="form-control" id="ajSaldo" value="${fmtValorMask(b.saldo.toFixed(2))}" style="font-family:var(--font-head);font-size:1.1rem;color:var(--green)" oninput="formatarValorInput(this)">
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn btn-primary" style="flex:1" onclick="_confirmarAjusteSaldo('${bancoId}')">✅ Confirmar Ajuste</button>
@@ -2547,7 +2547,7 @@ function ajustarSaldoBanco(bancoId) {
 function _confirmarAjusteSaldo(bancoId) {
   const b = db.bancos_saldo.find(x => x.id === bancoId);
   if (!b) return;
-  const novoSaldo = parseFloat(document.getElementById('ajSaldo').value);
+  const novoSaldo = valorNum('ajSaldo');
   if (isNaN(novoSaldo)) return alert('Informe um valor válido.');
   b.saldo = novoSaldo;
   saveData();
@@ -2568,7 +2568,7 @@ function quickLancarGasto(bancoId) {
       </div>
       <div class="form-group">
         <label class="form-label">Valor (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="qlgValor" placeholder="0,00" style="color:var(--red);font-family:var(--font-head)">
+        <input type="text" inputmode="decimal" class="form-control" id="qlgValor" placeholder="0,00" style="color:var(--red);font-family:var(--font-head)" oninput="formatarValorInput(this)">
       </div>
     </div>
     <div class="form-group">
@@ -2604,7 +2604,7 @@ function quickLancarGasto(bancoId) {
 
 function _saveQuickGasto(bancoId) {
   const data  = document.getElementById('qlgData').value;
-  const valor = parseFloat(document.getElementById('qlgValor').value);
+  const valor = valorNum('qlgValor');
   const desc  = document.getElementById('qlgDesc').value.trim();
   const tag   = document.getElementById('qlgTag').value;
   const formaRaw = document.getElementById('qlgTipo').value;
@@ -2641,7 +2641,7 @@ function quickLancarEntrada(bancoId) {
       </div>
       <div class="form-group">
         <label class="form-label">Valor (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="qleValor" placeholder="0,00" style="color:var(--green);font-family:var(--font-head)">
+        <input type="text" inputmode="decimal" class="form-control" id="qleValor" placeholder="0,00" style="color:var(--green);font-family:var(--font-head)" oninput="formatarValorInput(this)">
       </div>
     </div>
     <div class="form-group">
@@ -2675,7 +2675,7 @@ function quickLancarEntrada(bancoId) {
 
 function _saveQuickEntrada(bancoId) {
   const data  = document.getElementById('qleData').value;
-  const valor = parseFloat(document.getElementById('qleValor').value);
+  const valor = valorNum('qleValor');
   const desc  = document.getElementById('qleDesc').value.trim();
   const cat   = document.getElementById('qleCat').value;
   const forma = document.getElementById('qleForma').value;
@@ -2698,7 +2698,7 @@ function editExtratoItem(tipo, id) {
         <div class="form-group"><label class="form-label">Hora</label><input type="time" class="form-control" id="eeHora" value="${e.hora||''}"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="eeValor" value="${e.valor}"></div>
+        <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="eeValor" value="${fmtValorMask(e.valor)}" oninput="formatarValorInput(this)"></div>
         <div class="form-group"><label class="form-label">Conta de Destino</label>
           <select class="form-control" id="eeBanco">
             <option value="">💵 Dinheiro em mão</option>
@@ -2725,7 +2725,7 @@ function editExtratoItem(tipo, id) {
         <div class="form-group"><label class="form-label">Hora</label><input type="time" class="form-control" id="egHora" value="${g.hora||''}"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="egValor" value="${g.valor}"></div>
+        <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="egValor" value="${fmtValorMask(g.valor)}" oninput="formatarValorInput(this)"></div>
         <div class="form-group"><label class="form-label">Conta que Debitou</label>
           <select class="form-control" id="egBanco">
             <option value="dinheiro" ${(!g.banco_id||g.forma==='dinheiro')?'selected':''}>💵 Dinheiro</option>
@@ -2753,7 +2753,7 @@ function editExtratoItem(tipo, id) {
 
 function _saveEditEntrada(id) {
   const e        = db.entradas_caixa.find(x => x.id === id);
-  const novoValor= parseFloat(document.getElementById('eeValor').value);
+  const novoValor= valorNum('eeValor');
   const novoBanco= document.getElementById('eeBanco').value;
   const diff     = novoValor - parseFloat(e.valor||0);
 
@@ -2780,7 +2780,7 @@ function _saveEditEntrada(id) {
 
 function _saveEditGasto(id) {
   const g        = db.gastos.find(x => x.id === id);
-  const novoValor= parseFloat(document.getElementById('egValor').value);
+  const novoValor= valorNum('egValor');
   const bancoRaw = document.getElementById('egBanco').value;
   const { forma, banco_id, nome_banco } = _parseFormaGasto(bancoRaw === 'dinheiro' ? 'dinheiro' : bancoRaw);
 
@@ -3199,7 +3199,7 @@ function renderEntradas() {
         </div>
         <div class="form-group">
           <label class="form-label">Valor (R$)</label>
-          <input type="number" step="0.01" class="form-control" id="eqValor" placeholder="0,00" style="color:var(--green);font-family:var(--font-head)">
+          <input type="text" inputmode="decimal" class="form-control" id="eqValor" placeholder="0,00" style="color:var(--green);font-family:var(--font-head)" oninput="formatarValorInput(this)">
         </div>
       </div>
       <div class="form-row">
@@ -3314,7 +3314,7 @@ function clearFiltrosEntradas() {
 function saveEntradaCaixa() {
   const data      = document.getElementById('eqData').value;
   const hora      = document.getElementById('eqHora').value;
-  const valor     = parseFloat(document.getElementById('eqValor').value);
+  const valor     = valorNum('eqValor');
   const descricao = document.getElementById('eqDesc').value.trim();
   const categoria = document.getElementById('eqCat').value;
   const forma     = document.getElementById('eqForma').value;
@@ -3482,7 +3482,7 @@ function openAddCofrinho(id) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Meta (R$) — opcional</label>
-          <input type="number" step="0.01" class="form-control" id="cfMeta" value="${c?.meta||''}" placeholder="0,00">
+          <input type="text" inputmode="decimal" class="form-control" id="cfMeta" value="${fmtValorMask(c?.meta||'')}" placeholder="0,00" oninput="formatarValorInput(this)">
         </div>
         <div class="form-group">
           <label class="form-label">Cor</label>
@@ -3494,7 +3494,7 @@ function openAddCofrinho(id) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Valor Mensal (R$)</label>
-          <input type="number" step="0.01" class="form-control" id="cfValorMensal" value="${c?.consorcio_valor_mensal||''}" placeholder="500,00">
+          <input type="text" inputmode="decimal" class="form-control" id="cfValorMensal" value="${fmtValorMask(c?.consorcio_valor_mensal||'')}" placeholder="500,00" oninput="formatarValorInput(this)">
         </div>
         <div class="form-group">
           <label class="form-label">Duração (meses)</label>
@@ -3541,13 +3541,13 @@ function saveCofrinho(id) {
 
   let extra = {};
   if (tipo === 'consorcio') {
-    const vm = parseFloat(document.getElementById('cfValorMensal')?.value) || 0;
+    const vm = valorNum('cfValorMensal');
     const mt = parseInt(document.getElementById('cfMeses')?.value) || 12;
     const mi = document.getElementById('cfMesInicio')?.value || '';
     if (!vm || !mi) return alert('Informe o valor mensal e o mês de início.');
     extra = { consorcio_valor_mensal: vm, consorcio_meses_total: mt, consorcio_mes_inicio: mi, meta: vm * mt };
   } else {
-    extra = { meta: parseFloat(document.getElementById('cfMeta')?.value) || 0 };
+    extra = { meta: valorNum('cfMeta') };
   }
 
   if (id) {
@@ -3571,7 +3571,7 @@ function openDepositarCofrinho(id) {
     <div style="font-size:0.88rem;color:var(--text2);margin-bottom:14px">Saldo atual: <strong style="color:var(--green)">R$ ${fmtMoney(c.saldo)}</strong></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="cdData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="cdValor" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="cdValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Descrição</label><input type="text" class="form-control" id="cdDesc" placeholder="Ex: Guardei do freela de sábado…"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -3587,7 +3587,7 @@ function openRetirarCofrinho(id) {
     <div style="font-size:0.88rem;color:var(--text2);margin-bottom:14px">Saldo atual: <strong style="color:var(--green)">R$ ${fmtMoney(c.saldo)}</strong></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="cdData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="cdValor" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="cdValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Motivo</label><input type="text" class="form-control" id="cdDesc" placeholder="Por que está retirando?"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -3598,7 +3598,7 @@ function openRetirarCofrinho(id) {
 }
 
 function movCofrinho(id, tipo) {
-  const valor = parseFloat(document.getElementById('cdValor').value);
+  const valor = valorNum('cdValor');
   const data  = document.getElementById('cdData').value;
   const desc  = document.getElementById('cdDesc').value.trim();
   if (!valor || valor <= 0) return alert('Informe um valor válido.');
@@ -3714,7 +3714,7 @@ function openAddGasto(id) {
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="gData" value="${g?.data || today()}"></div>
       <div class="form-group"><label class="form-label">Hora</label><input type="time" class="form-control" id="gHora" value="${g?.hora || new Date().toTimeString().substring(0,5)}"></div>
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="gValor" value="${g?.valor || ''}" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="gValor" value="${fmtValorMask(g?.valor || '')}" placeholder="0,00" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Descrição</label><input type="text" class="form-control" id="gDesc" value="${g?.descricao || ''}" placeholder="Ex: Uber para trabalho"></div>
     <div class="form-group"><label class="form-label">Tag</label>
@@ -3796,7 +3796,7 @@ function editGasto(id) { openAddGasto(id); }
 function saveGasto(id) {
   const data      = document.getElementById('gData').value;
   const hora      = document.getElementById('gHora').value;
-  const valor     = parseFloat(document.getElementById('gValor').value);
+  const valor     = valorNum('gValor');
   const descricao = document.getElementById('gDesc').value.trim();
   const tag       = document.getElementById('gTag').value;
   const forma_raw = document.getElementById('gForma').value;
@@ -3886,6 +3886,9 @@ function _registrarCompraCredito(cartao_id, data, valor, descricao, tag) {
 function _saveGastoComoCompraCredito(forma_raw, data, valor, descricao, tag) {
   _registrarCompraCredito(forma_raw.slice(5), data, valor, descricao, tag);
   closeModal(); saveData(); updateBadges(); renderGastosTable();
+  if (currentPage === 'custos') renderCustos();
+  else if (currentPage === 'cartoes') renderCartoes();
+  else if (currentPage === 'dashboard') renderDashboard();
 }
 
 // ── Helper: debitar da conta certa ───────────────────────────────
@@ -4326,7 +4329,7 @@ function openAddCusto(id) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Valor por parcela (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="cValor" value="${c?.valor || ''}">
+        <input type="text" inputmode="decimal" class="form-control" id="cValor" value="${fmtValorMask(c?.valor || '')}" oninput="formatarValorInput(this)">
       </div>
       <div class="form-group"><label class="form-label">Dia Vencimento</label>
         <input type="number" min="1" max="31" class="form-control" id="cDia" value="${c?.dia_vencimento || ''}">
@@ -4402,7 +4405,7 @@ function _abrirPagarParcela(id, idx) {
         <input type="date" class="form-control" id="ppData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor Pago (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="ppValor" value="${c.valor}">
+        <input type="text" inputmode="decimal" class="form-control" id="ppValor" value="${fmtValorMask(c.valor)}" oninput="formatarValorInput(this)">
       </div>
     </div>
     ${_formaGastoHtml('pp')}
@@ -4420,7 +4423,7 @@ function _confirmarPagarParcela(id, idx) {
   const c = db.custos_mensais.find(x => x.id === id);
   if (!c) return;
   const data = document.getElementById('ppData').value;
-  const valor = parseFloat(document.getElementById('ppValor').value);
+  const valor = valorNum('ppValor');
   const forma_raw = document.getElementById('ppForma').value;
   if (!valor) return alert('Informe o valor pago.');
 
@@ -4490,7 +4493,7 @@ function editCusto(id) { openAddCusto(id); }
 
 function saveCusto(id) {
   const nome = document.getElementById('cNome').value.trim();
-  const valor = parseFloat(document.getElementById('cValor').value);
+  const valor = valorNum('cValor');
   const dia = parseInt(document.getElementById('cDia').value);
   const perfil = document.getElementById('cPerfil')?.value || 'Eu';
   const tipo_custo = document.getElementById('cTipo')?.value || 'fixo';
@@ -4563,7 +4566,7 @@ function toggleCusto(id) {
         <input type="date" class="form-control" id="cpData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor Pago (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="cpValor" value="${c.valor}">
+        <input type="text" inputmode="decimal" class="form-control" id="cpValor" value="${fmtValorMask(c.valor)}" oninput="formatarValorInput(this)">
       </div>
     </div>
     ${_formaGastoHtml('cp')}
@@ -4591,7 +4594,7 @@ function _confirmarPagCustoSimples(id) {
 function _confirmarPagCusto(id) {
   const c = db.custos_mensais.find(x => x.id === id);
   const data     = document.getElementById('cpData').value;
-  const valor    = parseFloat(document.getElementById('cpValor').value);
+  const valor    = valorNum('cpValor');
   const forma_raw= document.getElementById('cpForma').value;
   if (!valor) return alert('Informe o valor pago.');
 
@@ -4689,7 +4692,7 @@ function openAddInvest(id) {
   openModal(i ? 'EDITAR INVESTIMENTO' : 'NOVO INVESTIMENTO', `
     <div class="form-group"><label class="form-label">Nome do Produto</label><input type="text" class="form-control" id="iNome" value="${i?.nome || ''}" placeholder="Ex: Monitor Ultra Wide"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="iValor" value="${i?.valor || ''}"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="iValor" value="${fmtValorMask(i?.valor || '')}" oninput="formatarValorInput(this)"></div>
       <div class="form-group"><label class="form-label">Categoria</label>
         <select class="form-control" id="iCat">
           <option value="">Sem categoria</option>
@@ -4716,7 +4719,7 @@ function editInvest(id) { openAddInvest(id); }
 
 function saveInvest(id) {
   const nome = document.getElementById('iNome').value.trim();
-  const valor = parseFloat(document.getElementById('iValor').value);
+  const valor = valorNum('iValor');
   const categoria = document.getElementById('iCat').value;
   const prioridade = parseInt(document.getElementById('iPri').value);
   const link = document.getElementById('iLink').value.trim();
@@ -4912,7 +4915,7 @@ function deletePendencia(id) {
 
 function openAddEntrada(pendId) {
   openModal('NOVA ENTRADA', `
-    <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="eValor" placeholder="0,00"></div>
+    <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="eValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
     <div class="form-group"><label class="form-label">Motivo</label><input type="text" class="form-control" id="eMotivo" placeholder="Ex: Empréstimo para conta de luz..."></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data que Pegou</label><input type="date" class="form-control" id="ePegou" value="${today()}"></div>
@@ -4926,7 +4929,7 @@ function openAddEntrada(pendId) {
 }
 
 function saveEntrada(pendId) {
-  const valor = parseFloat(document.getElementById('eValor').value);
+  const valor = valorNum('eValor');
   const motivo = document.getElementById('eMotivo').value.trim();
   const data_pegou = document.getElementById('ePegou').value;
   const data_pagar = document.getElementById('ePagar').value;
@@ -4958,8 +4961,8 @@ function toggleEntrada(pendId, entId) {
         <input type="date" class="form-control" id="pePgData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor a Pagar Agora (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="pePgValor" value="${restante.toFixed(2)}"
-          placeholder="Pode ser parcial — ex: ${fmtMoney(restante/2)}">
+        <input type="text" inputmode="decimal" class="form-control" id="pePgValor" value="${fmtValorMask(restante.toFixed(2))}"
+          placeholder="Pode ser parcial — ex: ${fmtMoney(restante/2)}" oninput="formatarValorInput(this)">
       </div>
     </div>
     ${_formaGastoHtml('pe')}
@@ -4980,7 +4983,7 @@ function _confirmarPagPend(pendId, entId) {
   const p = db.pendencias.find(x => x.id === pendId);
   const e = p.entradas.find(x => x.id === entId);
   const data      = document.getElementById('pePgData').value;
-  const valor     = parseFloat(document.getElementById('pePgValor').value);
+  const valor     = valorNum('pePgValor');
   const obs       = document.getElementById('pePgObs').value.trim();
   const forma_raw = document.getElementById('peForma').value;
   if (!valor || valor <= 0) return alert('Informe o valor pago.');
@@ -5161,7 +5164,7 @@ function quickDepositar(bancoId) {
       <div class="form-group"><label class="form-label">Hora</label><input type="time" class="form-control" id="qdHora" value="${new Date().toTimeString().substring(0,5)}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="qdValor" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="qdValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
       <div class="form-group"><label class="form-label">Forma</label><select class="form-control" id="qdForma">${formaOpts()}</select></div>
     </div>
     <div class="form-group"><label class="form-label">Descrição</label><input type="text" class="form-control" id="qdDesc" placeholder="Ex: Pagamento cliente, freela…"></div>
@@ -5175,7 +5178,7 @@ function quickDepositar(bancoId) {
 function confirmQuickDepositar(bancoId) {
   const data  = document.getElementById('qdData').value;
   const hora  = document.getElementById('qdHora').value;
-  const valor = parseFloat(document.getElementById('qdValor').value);
+  const valor = valorNum('qdValor');
   const forma = document.getElementById('qdForma').value;
   const descricao = document.getElementById('qdDesc').value.trim();
   if (!valor || !descricao) return alert('Preencha valor e descrição.');
@@ -5599,7 +5602,7 @@ function confirmarPagamentoMes(clienteId, mesRef) {
         <input type="date" class="form-control" id="cpmData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor Recebido (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="cpmValor" value="${valorRestante.toFixed(2)}">
+        <input type="text" inputmode="decimal" class="form-control" id="cpmValor" value="${fmtValorMask(valorRestante.toFixed(2))}" oninput="formatarValorInput(this)">
       </div>
     </div>
     <div class="form-group"><label class="form-label">Referência do Mês</label>
@@ -5628,7 +5631,7 @@ function confirmarPagamentoMes(clienteId, mesRef) {
 
 function _confirmarPagamentoMes(clienteId, mesBase) {
   const c      = db.clientes.find(x=>x.id===clienteId);
-  const valor  = parseFloat(document.getElementById('cpmValor').value);
+  const valor  = valorNum('cpmValor');
   const data   = document.getElementById('cpmData').value;
   const mesRef = document.getElementById('cpmMesRef').value;
   const forma  = document.getElementById('cpmForma')?.value||'pix';
@@ -5667,7 +5670,7 @@ function addExtraMensal(clienteId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Valor (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="emValor" placeholder="0,00">
+        <input type="text" inputmode="decimal" class="form-control" id="emValor" placeholder="0,00" oninput="formatarValorInput(this)">
       </div>
       <div class="form-group"><label class="form-label">Dia de recebimento</label>
         <input type="number" min="1" max="31" class="form-control" id="emDia" placeholder="Ex: 20">
@@ -5683,7 +5686,7 @@ function addExtraMensal(clienteId) {
 function _salvarExtraMensal(clienteId) {
   const c = db.clientes.find(x => x.id === clienteId);
   const desc = document.getElementById('emDesc').value.trim();
-  const valor = parseFloat(document.getElementById('emValor').value);
+  const valor = valorNum('emValor');
   const dia = parseInt(document.getElementById('emDia').value) || null;
   if (!valor) return alert('Informe o valor.');
   if (!c.extras_mensais) c.extras_mensais = [];
@@ -5706,7 +5709,7 @@ function receberExtraMensal(clienteId, extraId, mes) {
         <input type="date" class="form-control" id="erData" value="${today()}">
       </div>
       <div class="form-group"><label class="form-label">Valor Recebido (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="erValor" value="${e.valor}">
+        <input type="text" inputmode="decimal" class="form-control" id="erValor" value="${fmtValorMask(e.valor)}" oninput="formatarValorInput(this)">
       </div>
     </div>
     ${_formaPagamentoHtml('er')}
@@ -5721,7 +5724,7 @@ function _confirmarExtraMensal(clienteId, extraId, mes) {
   const c = db.clientes.find(x => x.id === clienteId);
   const e = (c.extras_mensais||[]).find(x => x.id === extraId);
   const data = document.getElementById('erData').value;
-  const valor = parseFloat(document.getElementById('erValor').value);
+  const valor = valorNum('erValor');
   const forma = document.getElementById('erForma')?.value || 'pix';
   const bancoId = document.getElementById('erConta')?.value || '';
   if (!valor) return alert('Informe o valor.');
@@ -5916,7 +5919,7 @@ function openAddCliente(defaultTipo) {
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label" id="clValorLabel">${isMensal?'Valor Mensal (R$)':'Valor do Freela (R$)'}</label><input type="number" step="0.01" class="form-control" id="clValor" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label" id="clValorLabel">${isMensal?'Valor Mensal (R$)':'Valor do Freela (R$)'}</label><input type="text" inputmode="decimal" class="form-control" id="clValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
       <div class="form-group" id="clDiaWrap" style="${isMensal?'':'display:none'}"><label class="form-label">Dia de Pagamento</label><input type="number" min="1" max="31" class="form-control" id="clDia" placeholder="Ex: 12"></div>
       <div class="form-group" id="clPrazoWrap" style="${!isMensal?'':'display:none'}"><label class="form-label">Prazo / Data Limite</label><input type="date" class="form-control" id="clPrazo"></div>
     </div>
@@ -5968,7 +5971,7 @@ function saveCliente(id) {
     const parcelas = [];
     let i = 0;
     while (document.getElementById(`parcelaValor_${i}`)) {
-      const v = parseFloat(document.getElementById(`parcelaValor_${i}`).value) || 0;
+      const v = valorNum(`parcelaValor_${i}`);
       const d = parseInt(document.getElementById(`parcelaDia_${i}`).value) || null;
       if (v > 0) parcelas.push({ valor: v, dia: d, orig: (window._clParcelas||[])[i] });
       i++;
@@ -5986,7 +5989,7 @@ function saveCliente(id) {
       recebimentos: p.orig?.recebimentos || []
     }));
   } else {
-    valor_mensal  = parseFloat(document.getElementById('clValor')?.value) || 0;
+    valor_mensal  = valorNum('clValor');
     dia_pagamento = tipo_cobranca === 'mensal' ? (parseInt(document.getElementById('clDia')?.value) || null) : null;
     novasExtras   = null; // nao altera extras_mensais
   }
@@ -6053,7 +6056,7 @@ function editCliente(id) {
     <div id="clCampoSimples" style="${isParcelado?'display:none':''}">
       <div class="form-row">
         <div class="form-group"><label class="form-label" id="clValorLabel">${isMensal?'Valor Mensal (R$)':'Valor do Freela (R$)'}</label>
-          <input type="number" step="0.01" class="form-control" id="clValor" value="${c.valor_mensal}">
+          <input type="text" inputmode="decimal" class="form-control" id="clValor" value="${fmtValorMask(c.valor_mensal)}" oninput="formatarValorInput(this)">
         </div>
         <div class="form-group" id="clDiaWrap" style="${isMensal?'':'display:none'}">
           <label class="form-label">Dia de Pagamento</label>
@@ -6074,7 +6077,7 @@ function editCliente(id) {
         <div id="parcelaRow_${i}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
           <div class="form-group" style="flex:1;margin:0">
             <label class="form-label" style="font-size:0.68rem">${i===0?'Parcela Principal':'Parcela '+(i+1)}</label>
-            <input type="number" step="0.01" class="form-control" id="parcelaValor_${i}" value="${p.valor}" placeholder="R$ 0,00">
+            <input type="text" inputmode="decimal" class="form-control" id="parcelaValor_${i}" value="${fmtValorMask(p.valor)}" placeholder="R$ 0,00" oninput="formatarValorInput(this)">
           </div>
           <div class="form-group" style="width:90px;margin:0">
             <label class="form-label" style="font-size:0.68rem">Dia</label>
@@ -6115,7 +6118,7 @@ function _addParcelaRow() {
   row.innerHTML = `
     <div class="form-group" style="flex:1;margin:0">
       <label class="form-label" style="font-size:0.68rem">Parcela ${i+1}</label>
-      <input type="number" step="0.01" class="form-control" id="parcelaValor_${i}" placeholder="R$ 0,00">
+      <input type="text" inputmode="decimal" class="form-control" id="parcelaValor_${i}" placeholder="R$ 0,00" oninput="formatarValorInput(this)">
     </div>
     <div class="form-group" style="width:90px;margin:0">
       <label class="form-label" style="font-size:0.68rem">Dia</label>
@@ -6322,7 +6325,7 @@ function confirmarFreelance(clienteId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Recebimento</label><input type="date" class="form-control" id="flData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="number" step="0.01" class="form-control" id="flValor" value="${c.valor_mensal}"></div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="flValor" value="${fmtValorMask(c.valor_mensal)}" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="flObs" placeholder="Ex: Pix recebido, boleto pago..."></div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -6334,7 +6337,7 @@ function confirmarFreelance(clienteId) {
 
 function confirmReceberFreelance(clienteId) {
   const c     = db.clientes.find(x => x.id === clienteId);
-  const valor = parseFloat(document.getElementById('flValor').value);
+  const valor = valorNum('flValor');
   const data  = document.getElementById('flData').value;
   const obs   = document.getElementById('flObs').value.trim();
   if (!valor) return alert('Informe o valor recebido.');
@@ -6367,7 +6370,7 @@ function openAddVale(clienteId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Vale</label><input type="date" class="form-control" id="vData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" step="0.01" class="form-control" id="vValor" placeholder="0,00" max="${Math.max(0,valorRestante)}"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input type="text" inputmode="decimal" class="form-control" id="vValor" placeholder="0,00" max="${Math.max(0,valorRestante)}" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="vObs" placeholder="Ex: Pediu dinheiro emprestado antes do pagamento…"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -6378,7 +6381,7 @@ function openAddVale(clienteId) {
 }
 
 function saveVale(clienteId) {
-  const valor = parseFloat(document.getElementById('vValor').value);
+  const valor = valorNum('vValor');
   const data  = document.getElementById('vData').value;
   const obs   = document.getElementById('vObs').value.trim();
   if (!valor || valor <= 0) return alert('Informe um valor válido.');
@@ -6416,7 +6419,7 @@ function addPagamentoCliente(clienteId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Pagamento</label><input type="date" class="form-control" id="pgData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="number" step="0.01" class="form-control" id="pgValor" value="${valorEfetivo.toFixed(2)}"></div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="pgValor" value="${fmtValorMask(valorEfetivo.toFixed(2))}" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group"><label class="form-label">Observação (opcional)</label><input type="text" class="form-control" id="pgObs" placeholder="Ex: Pix recebido, dinheiro…"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -6428,7 +6431,7 @@ function addPagamentoCliente(clienteId) {
 
 function confirmPagamentoCliente(clienteId) {
   const c      = db.clientes.find(x => x.id === clienteId);
-  const valor  = parseFloat(document.getElementById('pgValor').value);
+  const valor  = valorNum('pgValor');
   const data   = document.getElementById('pgData').value;
   const obs    = document.getElementById('pgObs').value.trim();
   if (!valor) return alert('Informe o valor recebido.');
@@ -6463,7 +6466,7 @@ function editPagamentoCliente(clienteId, pagId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Valor (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="epValor" value="${pg.valor}">
+        <input type="text" inputmode="decimal" class="form-control" id="epValor" value="${fmtValorMask(pg.valor)}" oninput="formatarValorInput(this)">
       </div>
       <div class="form-group"><label class="form-label">Conta que Recebeu</label>
         <select class="form-control" id="epConta">
@@ -6490,7 +6493,7 @@ function _saveEditPagamentoCliente(clienteId, pagId) {
   const pg  = (c.pagamentos||[]).find(x => x.id === pagId);
   if (!pg) return;
 
-  const novoValor = parseFloat(document.getElementById('epValor').value);
+  const novoValor = valorNum('epValor');
   const novaConta = document.getElementById('epConta').value;
   const diff      = novoValor - parseFloat(pg.valor||0);
 
@@ -7010,7 +7013,7 @@ function openAddCarteiraRapida() {
       <input type="text" class="form-control" id="cwNome" value="Minha Carteira" placeholder="Ex: Minha Carteira, Carteira da Bolsa...">
     </div>
     <div class="form-group"><label class="form-label">Valor Atual em Espécie (R$)</label>
-      <input type="number" step="0.01" class="form-control" id="cwSaldo" placeholder="0,00">
+      <input type="text" inputmode="decimal" class="form-control" id="cwSaldo" placeholder="0,00" oninput="formatarValorInput(this)">
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveCarteiraRapida()">Salvar</button>
@@ -7021,7 +7024,7 @@ function openAddCarteiraRapida() {
 
 function saveCarteiraRapida() {
   const nome  = document.getElementById('cwNome').value.trim()||'Minha Carteira';
-  const saldo = parseFloat(document.getElementById('cwSaldo').value)||0;
+  const saldo = valorNum('cwSaldo');
   db.bancos_saldo.push({ id:uid(), nome, tipo:'carteira', saldo, finalidade:'Dinheiro em espécie', cor:'#ffeb3b', dono:'', limite:0, vencimento_fatura:null, limite_usado:0 });
   closeModal(); saveData(); renderCartoes();
 }
@@ -7035,7 +7038,7 @@ function atualizarCarteira(id) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Novo Valor em Espécie (R$)</label>
-        <input type="number" step="0.01" class="form-control" id="cwNovoSaldo" value="${b.saldo}" placeholder="0,00">
+        <input type="text" inputmode="decimal" class="form-control" id="cwNovoSaldo" value="${fmtValorMask(b.saldo)}" placeholder="0,00" oninput="formatarValorInput(this)">
       </div>
       <div class="form-group">
         <label class="form-label">Motivo (opcional)</label>
@@ -7050,7 +7053,7 @@ function atualizarCarteira(id) {
 }
 
 function salvarAtualizacaoCarteira(id) {
-  const novoSaldo = parseFloat(document.getElementById('cwNovoSaldo').value)||0;
+  const novoSaldo = valorNum('cwNovoSaldo');
   const b = db.bancos_saldo.find(x=>x.id===id);
   b.saldo = novoSaldo;
   closeModal(); saveData(); renderCartoes();
@@ -7145,8 +7148,8 @@ function openAddBancoCartao(id) {
       <div class="form-group"><label class="form-label">Dono (opcional)</label><input type="text" class="form-control" id="bcDono" value="${b?.dono||''}" placeholder="Ex: Minha mãe, Eu..."></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Saldo / Limite Disponível (R$)</label><input type="number" step="0.01" class="form-control" id="bcSaldo" value="${b?.saldo||''}"></div>
-      <div class="form-group" id="bcLimiteWrap" style="${tipo==='credito'?'':'display:none'}"><label class="form-label">Limite Total (R$)</label><input type="number" step="0.01" class="form-control" id="bcLimite" value="${b?.limite||''}"></div>
+      <div class="form-group"><label class="form-label">Saldo / Limite Disponível (R$)</label><input type="text" inputmode="decimal" class="form-control" id="bcSaldo" value="${fmtValorMask(b?.saldo||'')}" oninput="formatarValorInput(this)"></div>
+      <div class="form-group" id="bcLimiteWrap" style="${tipo==='credito'?'':'display:none'}"><label class="form-label">Limite Total (R$)</label><input type="text" inputmode="decimal" class="form-control" id="bcLimite" value="${fmtValorMask(b?.limite||'')}" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group" id="bcVencWrap" style="${tipo==='credito'?'':'display:none'}">
       <label class="form-label">Dia de Vencimento da Fatura</label><input type="number" min="1" max="31" class="form-control" id="bcVenc" value="${b?.vencimento_fatura||''}">
@@ -7178,8 +7181,8 @@ function saveBancoCartao(id) {
   const nome        = document.getElementById('bcNome').value.trim();
   const tipo        = document.getElementById('bcTipo').value;
   const dono        = document.getElementById('bcDono').value.trim();
-  const saldo       = parseFloat(document.getElementById('bcSaldo').value)||0;
-  const limite      = tipo==='credito'?(parseFloat(document.getElementById('bcLimite').value)||0):0;
+  const saldo       = valorNum('bcSaldo');
+  const limite      = tipo==='credito'?(valorNum('bcLimite')):0;
   const venc        = tipo==='credito'?(parseInt(document.getElementById('bcVenc').value)||null):null;
   const finalidade  = document.getElementById('bcFinalidade').value.trim();
   const cor         = document.getElementById('bCor').value||'#00e676';
@@ -7201,7 +7204,7 @@ function openLancarCompraCredito(cartaoId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data da Compra</label><input type="date" class="form-control" id="ccData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Total (R$)</label><input type="number" step="0.01" class="form-control" id="ccValor" placeholder="0,00"></div>
+      <div class="form-group"><label class="form-label">Valor Total (R$)</label><input type="text" inputmode="decimal" class="form-control" id="ccValor" placeholder="0,00" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Descrição</label><input type="text" class="form-control" id="ccDesc" placeholder="Ex: Geladeira Samsung..."></div>
@@ -7227,7 +7230,7 @@ function openLancarCompraCredito(cartaoId) {
 function saveCompraCredito() {
   const cartao_id  = document.getElementById('ccCartao').value;
   const data       = document.getElementById('ccData').value;
-  const valor      = parseFloat(document.getElementById('ccValor').value);
+  const valor      = valorNum('ccValor');
   const descricao  = document.getElementById('ccDesc').value.trim();
   const parcelas   = parseInt(document.getElementById('ccParc').value)||1;
   const tag        = document.getElementById('ccTag').value;
@@ -7258,7 +7261,7 @@ function pagarFatura(cartaoId) {
     <div style="font-size:0.88rem;color:var(--text2);margin-bottom:14px">Fatura do mês: <strong style="color:var(--orange)">R$ ${fmtMoney(faturaTotal)}</strong></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Pagamento</label><input type="date" class="form-control" id="pfData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Pago (R$)</label><input type="number" step="0.01" class="form-control" id="pfValor" value="${faturaTotal.toFixed(2)}"></div>
+      <div class="form-group"><label class="form-label">Valor Pago (R$)</label><input type="text" inputmode="decimal" class="form-control" id="pfValor" value="${fmtValorMask(faturaTotal.toFixed(2))}" oninput="formatarValorInput(this)"></div>
     </div>
     ${_formaGastoHtml('pf')}
     <div style="background:rgba(255,152,0,0.06);border:1px solid var(--orange);border-radius:var(--radius2);padding:10px;margin-top:10px;font-size:0.78rem;color:var(--text2)">
@@ -7272,7 +7275,7 @@ function pagarFatura(cartaoId) {
 }
 
 function confirmarPagamentoFatura(cartaoId) {
-  const valor    = parseFloat(document.getElementById('pfValor').value);
+  const valor    = valorNum('pfValor');
   const data     = document.getElementById('pfData').value;
   const forma_raw= document.getElementById('pfForma')?.value || 'dinheiro';
   if (!valor) return alert('Informe o valor pago');
@@ -7634,7 +7637,7 @@ function _toggleContaRecebida(prefixId) {
 // Override confirmPagamentoCliente to auto-add entrada
 function confirmPagamentoCliente(clienteId) {
   const c       = db.clientes.find(x=>x.id===clienteId);
-  const valor   = parseFloat(document.getElementById('pgValor').value);
+  const valor   = valorNum('pgValor');
   const data    = document.getElementById('pgData').value;
   const obs     = document.getElementById('pgObs').value.trim();
   const forma   = document.getElementById('pgForma')?.value||'pix';
@@ -7660,7 +7663,7 @@ function confirmPagamentoCliente(clienteId) {
 // Override confirmReceberFreelance to auto-add entrada
 function confirmReceberFreelance(clienteId) {
   const c     = db.clientes.find(x=>x.id===clienteId);
-  const valor = parseFloat(document.getElementById('flValor').value);
+  const valor = valorNum('flValor');
   const data  = document.getElementById('flData').value;
   const obs   = document.getElementById('flObs').value.trim();
   const forma = document.getElementById('flForma')?.value||'pix';
@@ -7692,7 +7695,7 @@ function addPagamentoCliente(clienteId) {
     </div>`:''}
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data do Pagamento</label><input type="date" class="form-control" id="pgData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="number" step="0.01" class="form-control" id="pgValor" value="${valorEfetivo.toFixed(2)}"></div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="pgValor" value="${fmtValorMask(valorEfetivo.toFixed(2))}" oninput="formatarValorInput(this)"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Referência (de qual mês é este pagamento?)</label>
@@ -7727,7 +7730,7 @@ function confirmarFreelance(clienteId) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="flData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="number" step="0.01" class="form-control" id="flValor" value="${c.valor_mensal}"></div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="flValor" value="${fmtValorMask(c.valor_mensal)}" oninput="formatarValorInput(this)"></div>
     </div>
     ${_formaPagamentoHtml('fl')}
     <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="flObs" placeholder="Ex: Pix recebido, dinheiro…"></div>
