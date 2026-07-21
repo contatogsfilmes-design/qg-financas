@@ -7378,7 +7378,10 @@ function confirmarPagamentoFatura(cartaoId) {
       if (d.toISOString().substring(0,7)===mes) c.pago=true;
     }
   });
-  if (card) card.limite_usado = Math.max(0,(parseFloat(card.limite_usado||0))-valor);
+  if (card) {
+    card.limite_usado = Math.max(0,(parseFloat(card.limite_usado||0))-valor);
+    card.saldo = parseFloat(card.saldo||0) + valor;
+  }
 
   // Log gasto
   db.gastos.push({ id:uid(), data, hora: new Date().toTimeString().substring(0,5), valor,
