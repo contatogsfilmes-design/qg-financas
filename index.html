@@ -1794,13 +1794,13 @@ function renderMobileQuick() {
   }
 
   const bancosBtns = [
-    { id: 'dinheiro', label: '💵 Dinheiro' },
-    ...db.bancos_saldo.filter(b => b.tipo !== 'credito').map(b => ({ id: b.id, label: b.nome })),
-    ...db.bancos_saldo.filter(b => b.tipo === 'credito').map(b => ({ id: 'cred_' + b.id, label: '💳 ' + b.nome }))
+    { id: 'dinheiro', label: '💵 Dinheiro', disp: Math.max(0, parseFloat(db.dinheiro_fisico||0)) },
+    ...db.bancos_saldo.filter(b => b.tipo !== 'credito').map(b => ({ id: b.id, label: b.nome, disp: Math.max(0, parseFloat(b.saldo||0)) })),
+    ...db.bancos_saldo.filter(b => b.tipo === 'credito').map(b => ({ id: 'cred_' + b.id, label: '💳 ' + b.nome, disp: Math.max(0, parseFloat(b.saldo||0)) }))
   ].map(b => {
     const sel = _mqBanco === b.id;
     const cls = sel ? (_mqModo === 'gasto' ? 'selected-gasto' : 'selected-entrada') : '';
-    return `<button class="mq-banco-btn ${cls}" onclick="_mqSelecionaBanco('${b.id}')">${b.label}</button>`;
+    return `<button class="mq-banco-btn ${cls}" onclick="_mqSelecionaBanco('${b.id}')">${b.label}<span style="display:block;font-size:0.62rem;opacity:0.75;margin-top:2px">R$ ${fmtMoney(b.disp)}</span></button>`;
   }).join('');
 
   // Últimas 5 movimentações
