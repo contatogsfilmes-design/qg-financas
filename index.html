@@ -7311,9 +7311,12 @@ function saveCompraCredito() {
   if (!valor||!descricao) return alert('Preencha valor e descrição');
   if (!db.cartao_compras) db.cartao_compras=[];
   db.cartao_compras.push({ id: uid(), cartao_id, data, valor, descricao, parcelas, tag, pago: false });
-  // Update limite_usado
+  // Update limite_usado e limite disponível
   const card = db.bancos_saldo.find(b=>b.id===cartao_id);
-  if (card) card.limite_usado = (parseFloat(card.limite_usado||0)) + valor;
+  if (card) {
+    card.limite_usado = (parseFloat(card.limite_usado||0)) + valor;
+    card.saldo = parseFloat(card.saldo||0) - valor;
+  }
   closeModal(); saveData(); renderCartoes();
 }
 
@@ -7322,7 +7325,10 @@ function deleteCartaoCompra(id) {
   const c = (db.cartao_compras||[]).find(x=>x.id===id);
   if (c) {
     const card = db.bancos_saldo.find(b=>b.id===c.cartao_id);
-    if (card) card.limite_usado = Math.max(0,(parseFloat(card.limite_usado||0))-c.valor);
+    if (card) {
+      card.limite_usado = Math.max(0,(parseFloat(card.limite_usado||0))-c.valor);
+      card.saldo = parseFloat(card.saldo||0) + c.valor;
+    }
   }
   db.cartao_compras = (db.cartao_compras||[]).filter(x=>x.id!==id);
   saveData(); renderCartoes();
