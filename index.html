@@ -6007,7 +6007,7 @@ function renderClientesTodos(mesBase) {
     const v = (c.vales||[]).filter(x=>!x.quitado).reduce((s,x)=>s+parseFloat(x.valor||0),0);
     return a + Math.max(0, parseFloat(c.valor_mensal||0)-v);
   },0);
-  const totalFreelPend = freelances.filter(c=>!c.freelance_pago).reduce((a,c)=>a+parseFloat(c.valor_mensal||0),0);
+  const totalFreelPend = freelances.reduce((a,c)=>a+_freelaPendente(c),0);
 
   document.getElementById('receberContent').innerHTML = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
