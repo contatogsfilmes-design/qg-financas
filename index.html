@@ -6475,7 +6475,10 @@ function _viewClienteMensal(c) {
 }
 
 function _viewClienteFreelance(c) {
-  const pago = !!c.freelance_pago;
+  const parcelas = c.parcelas_freela || [];
+  const temParcelas = parcelas.length > 0;
+  const pago = _freelaCompleto(c);
+  const total = _freelaTotal(c);
   const hoje = today();
   const atrasado = !pago && c.prazo_freelance && c.prazo_freelance < hoje;
   openModal(`⚡ FREELA: ${c.nome}`, `
@@ -6487,12 +6490,13 @@ function _viewClienteFreelance(c) {
             ${pago?'✅ FREELA PAGO':atrasado?'⚠️ PAGAMENTO ATRASADO':'⏳ AGUARDANDO PAGAMENTO'}
           </div>
           <div style="font-family:var(--font-head);font-size:1.8rem;color:${pago?'var(--text3)':'var(--blue)'};${pago?'text-decoration:line-through;opacity:0.5':''}">
-            R$ ${fmtMoney(c.valor_mensal)}
+            R$ ${fmtMoney(total)}
           </div>
+          ${!pago && temParcelas?`<div style="font-size:0.78rem;color:var(--blue);margin-top:2px">Falta receber R$ ${fmtMoney(_freelaPendente(c))}</div>`:''}
           ${c.prazo_freelance?`<div style="font-size:0.75rem;color:${atrasado?'var(--red)':'var(--text3)'}">Prazo: ${fmtDate(c.prazo_freelance)}</div>`:''}
         </div>
-        ${!pago?`<button class="btn btn-primary" onclick="confirmarFreelance('${c.id}')" style="font-size:1rem;padding:12px 24px">✅ Marcar como Recebido</button>`
-               :`<button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${c.id}')">↩️ Reabrir como Pendente</button>`}
+        ${!temParcelas ? (!pago?`<button class="btn btn-primary" onclick="confirmarFreelance('${c.id}')" style="font-size:1rem;padding:12px 24px">✅ Marcar como Recebido</button>`
+               :`<button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${c.id}')">↩️ Reabrir como Pendente</button>`) : ''}
       </div>
     </div>
 
@@ -6503,6 +6507,23 @@ function _viewClienteFreelance(c) {
       ${c.inicio?`<div class="client-meta"><div class="client-meta-label">INÍCIO</div><div class="client-meta-val">${fmtDate(c.inicio)}</div></div>`:''}
     </div>
     ${c.descricao?`<div style="font-size:0.85rem;color:var(--text2);padding:10px 12px;background:var(--bg3);border-radius:var(--radius2);margin-bottom:14px">${c.descricao}</div>`:''}
+
+    ${temParcelas?`
+    <!-- PARCELAS -->
+    <div style="font-weight:700;margin-bottom:8px">💰 Parcelas</div>
+    <div style="display:grid;gap:6px;margin-bottom:16px">
+      ${parcelas.map(p => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border-radius:var(--radius2);flex-wrap:wrap">
+        <span style="font-size:0.82rem;color:var(--text2);flex:1">
+          ${p.pago?'✅':'⏳'} ${p.descricao}${p.dia?` <span style="color:var(--text3)">(dia ${p.dia})</span>`:''}
+          ${p.pago?`<span style="color:var(--green);font-size:0.7rem"> — recebida ${fmtDate(p.data_pagamento)}</span>`:''}
+        </span>
+        <span style="font-family:var(--font-head);font-size:0.95rem;color:${p.pago?'var(--text3)':'var(--blue)'}">R$ ${fmtMoney(p.valor)}</span>
+        ${!p.pago
+          ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="receberParcelaFreela('${c.id}','${p.id}')">✅ Receber</button>`
+          : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerParcelaFreela('${c.id}','${p.id}')">↩️</button>`}
+      </div>`).join('')}
+    </div>` : ''}
 
     <!-- HISTÓRICO -->
     <div style="font-weight:700;margin-bottom:8px">📋 Histórico</div>
@@ -6519,6 +6540,60 @@ function _viewClienteFreelance(c) {
         </tbody></table></div>`}
     </div>
   `, true);
+}
+
+function receberParcelaFreela(clienteId, parcelaId) {
+  const c = db.clientes.find(x => x.id === clienteId);
+  const p = (c.parcelas_freela||[]).find(x => x.id === parcelaId);
+  if (!p) return;
+  openModal(`✅ RECEBER — ${p.descricao}`, `
+    <div style="padding:10px;background:var(--bg3);border-radius:var(--radius2);margin-bottom:14px">
+      <div style="font-size:0.68rem;color:var(--text3)">VALOR</div>
+      <div style="font-family:var(--font-head);color:var(--blue);font-size:1.1rem">R$ ${fmtMoney(p.valor)}</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Data do Recebimento</label><input type="date" class="form-control" id="pfData" value="${today()}"></div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="pfValor" value="${fmtValorMask(p.valor)}" oninput="formatarValorInput(this)"></div>
+    </div>
+    ${_formaPagamentoHtml('pf')}
+    <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="pfObs" placeholder="Ex: Pix recebido, dinheiro…"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="confirmReceberParcelaFreela('${clienteId}','${parcelaId}')">✅ Confirmar</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+}
+
+function confirmReceberParcelaFreela(clienteId, parcelaId) {
+  const c = db.clientes.find(x => x.id === clienteId);
+  const p = (c.parcelas_freela||[]).find(x => x.id === parcelaId);
+  if (!p) return;
+  const valor   = valorNum('pfValor');
+  const data    = document.getElementById('pfData').value;
+  const obs     = document.getElementById('pfObs').value.trim();
+  const forma   = document.getElementById('pfForma')?.value || 'pix';
+  const bancoId = document.getElementById('pfConta')?.value || '';
+  if (!valor) return alert('Informe o valor recebido.');
+  if (!c.pagamentos) c.pagamentos = [];
+  c.pagamentos.push({ id: uid(), data, valor, obs: obs || `${p.descricao} recebida`, parcela_id: p.id });
+  p.pago = true;
+  p.data_pagamento = data;
+  c.freelance_pago = _freelaCompleto(c);
+  if (c.freelance_pago) c.data_pagamento_freela = data;
+  _persistEntrada({ data, hora: new Date().toTimeString().substring(0,5), valor,
+    descricao: `${p.descricao} — ${c.nome}`, categoria: c.categoria||'Freela / Serviço', forma, bancoId, obs: obs||'' });
+  closeModal(); saveData(); renderReceber();
+}
+
+function desfazerParcelaFreela(clienteId, parcelaId) {
+  if (!confirm('Desfazer o recebimento desta parcela?')) return;
+  const c = db.clientes.find(x => x.id === clienteId);
+  const p = (c.parcelas_freela||[]).find(x => x.id === parcelaId);
+  if (!p) return;
+  p.pago = false;
+  p.data_pagamento = null;
+  c.freelance_pago = false;
+  saveData(); renderReceber();
 }
 
 function confirmarFreelance(clienteId) {
