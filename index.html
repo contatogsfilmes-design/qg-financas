@@ -5931,8 +5931,8 @@ function desfazerPagamentoMes(clienteId, mesBase) {
 
 function renderClientesFreelances() {
   const freelances = db.clientes.filter(c=>c.tipo_cobranca==='freelance');
-  const totalPend = freelances.filter(c=>!c.freelance_pago).reduce((a,c)=>a+parseFloat(c.valor_mensal||0),0);
-  const totalPago = freelances.filter(c=>c.freelance_pago).reduce((a,c)=>a+parseFloat(c.valor_mensal||0),0);
+  const totalPend = freelances.reduce((a,c)=>a+_freelaPendente(c),0);
+  const totalPago = freelances.reduce((a,c)=>a+_freelaRecebido(c),0);
 
   document.getElementById('receberContent').innerHTML = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
@@ -5943,14 +5943,16 @@ function renderClientesFreelances() {
     <div>
     ${freelances.length===0
       ? '<div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">Nenhum freelance cadastrado</div></div>'
-      : [...freelances.filter(c=>!c.freelance_pago), ...freelances.filter(c=>c.freelance_pago)].map(c => {
-          const pago = !!c.freelance_pago;
+      : [...freelances.filter(c=>!_freelaCompleto(c)), ...freelances.filter(c=>_freelaCompleto(c))].map(c => {
+          const pago = _freelaCompleto(c);
+          const temParcelas = (c.parcelas_freela||[]).length > 0;
           const hoje = today();
           const atrasado = !pago && c.prazo_freelance && c.prazo_freelance < hoje;
+          const parcial = !pago && temParcelas && _freelaRecebido(c) > 0;
           return `
-          <div class="client-card" style="border-left:3px solid ${pago?'var(--green)':atrasado?'var(--red)':'var(--blue)'}">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-              <div>
+          <div class="client-card" style="border-left:3px solid ${pago?'var(--green)':parcial?'var(--blue)':atrasado?'var(--red)':'var(--blue)'}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px">
+              <div style="flex:1;min-width:0">
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                   <div class="client-name">${c.nome}</div>
                   <span class="client-cat">${c.categoria||''}</span>
@@ -5958,17 +5960,31 @@ function renderClientesFreelances() {
                     background:${pago?'rgba(0,230,118,0.12)':atrasado?'rgba(255,82,82,0.10)':'rgba(64,196,255,0.12)'};
                     color:${pago?'var(--green)':atrasado?'var(--red)':'var(--blue)'};
                     border:1px solid ${pago?'rgba(0,230,118,0.3)':atrasado?'rgba(255,82,82,0.3)':'rgba(64,196,255,0.3)'}">
-                    ⚡ ${pago?'✅ PAGO':atrasado?'⚠️ ATRASADO':'⏳ PENDENTE'}
+                    ⚡ ${pago?'✅ PAGO':parcial?'⚡ PARCIAL':atrasado?'⚠️ ATRASADO':'⏳ PENDENTE'}
                   </span>
                 </div>
                 <div style="font-family:var(--font-head);font-size:1.2rem;color:${pago?'var(--text3)':'var(--blue)'};${pago?'text-decoration:line-through;opacity:0.5':''}">
-                  R$ ${fmtMoney(c.valor_mensal)}
+                  R$ ${fmtMoney(_freelaTotal(c))}
                 </div>
+                ${parcial?`<div style="font-size:0.75rem;color:var(--blue);margin-top:2px">⚡ Recebido R$ ${fmtMoney(_freelaRecebido(c))} — falta <strong style="color:var(--yellow)">R$ ${fmtMoney(_freelaPendente(c))}</strong></div>`:''}
                 ${c.prazo_freelance?`<div style="font-size:0.72rem;color:${atrasado?'var(--red)':'var(--text3)'}">📅 Prazo: ${fmtDate(c.prazo_freelance)}</div>`:''}
+                ${temParcelas?`
+                <div style="margin-top:6px;display:grid;gap:4px">
+                  ${(c.parcelas_freela||[]).map(p => `
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius2);flex-wrap:wrap">
+                    <span style="font-size:0.8rem;color:var(--text2);flex:1">
+                      ${p.pago?'✅':'⏳'} ${p.descricao}${p.dia?` <span style="color:var(--text3)">(dia ${p.dia})</span>`:''}
+                    </span>
+                    <span style="font-family:var(--font-head);font-size:0.9rem;color:${p.pago?'var(--text3)':'var(--blue)'}">R$ ${fmtMoney(p.valor)}</span>
+                    ${!p.pago
+                      ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="receberParcelaFreela('${c.id}','${p.id}')">✅ Receber</button>`
+                      : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerParcelaFreela('${c.id}','${p.id}')">↩️</button>`}
+                  </div>`).join('')}
+                </div>` : ''}
               </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                ${!pago?`<button class="btn btn-primary btn-sm" onclick="confirmarFreelance('${c.id}')">✅ Receber</button>`
-                       :`<button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${c.id}')">↩️ Reabrir</button>`}
+              <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
+                ${!temParcelas ? (!pago?`<button class="btn btn-primary btn-sm" onclick="confirmarFreelance('${c.id}')">✅ Receber</button>`
+                       :`<button class="btn btn-outline btn-sm" onclick="reabrirFreelance('${c.id}')">↩️ Reabrir</button>`) : ''}
                 <button class="btn btn-outline btn-sm" onclick="viewCliente('${c.id}')">👁️</button>
                 <button class="btn-icon" onclick="editCliente('${c.id}')">✏️</button>
               </div>
