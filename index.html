@@ -6206,13 +6206,22 @@ function editCliente(id) {
   const c = db.clientes.find(x => x.id === id);
   const tipo = c.tipo_cobranca || 'mensal';
   const isMensal = tipo === 'mensal';
-  const extras = c.extras_mensais || [];
-  // Monta lista de parcelas: principal + extras
-  window._clParcelas = [
-    { valor: c.valor_mensal || '', dia: c.dia_pagamento || '' },
-    ...extras.map(e => ({ id: e.id, valor: e.valor, dia: e.dia || '', desc: e.descricao || '' }))
-  ];
-  const isParcelado = extras.length > 0;
+  // Monta lista de parcelas: mensal = principal + extras_mensais; freela = parcelas_freela (ou 1 linha simples)
+  let isParcelado;
+  if (isMensal) {
+    const extras = c.extras_mensais || [];
+    window._clParcelas = [
+      { valor: c.valor_mensal || '', dia: c.dia_pagamento || '' },
+      ...extras.map(e => ({ id: e.id, valor: e.valor, dia: e.dia || '', desc: e.descricao || '' }))
+    ];
+    isParcelado = extras.length > 0;
+  } else {
+    const parcelasFreela = c.parcelas_freela || [];
+    window._clParcelas = parcelasFreela.length > 0
+      ? parcelasFreela.map(p => ({ id: p.id, valor: p.valor, dia: p.dia || '', desc: p.descricao || '', pago: p.pago, data_pagamento: p.data_pagamento }))
+      : [{ valor: c.valor_mensal || '', dia: c.dia_pagamento || '' }];
+    isParcelado = parcelasFreela.length > 0;
+  }
 
   openModal('EDITAR CLIENTE', `
     <!-- TIPO DE COBRANÇA -->
