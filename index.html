@@ -2034,8 +2034,8 @@ function renderDashboard() {
         const valesPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
         const falta = Math.max(0, parseFloat(c.valor_mensal||0) - valesPend - recebidoMes);
         total += falta;
-      } else if (tipo === 'freelance' && !c.freelance_pago) {
-        total += parseFloat(c.valor_mensal||0);
+      } else if (tipo === 'freelance') {
+        total += _freelaPendente(c);
       }
       // Extras mensais nao recebidos este mes
       (c.extras_mensais||[]).forEach(e => {
@@ -5354,8 +5354,8 @@ function renderResumoTab(c) {
         if (_clientePagoNoMes(c, mes)) return;
         const valesPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
         total += Math.max(0, parseFloat(c.valor_mensal||0) - valesPend);
-      } else if (tipo === 'freelance' && !c.freelance_pago) {
-        total += parseFloat(c.valor_mensal||0);
+      } else if (tipo === 'freelance') {
+        total += _freelaPendente(c);
       }
     });
     return total;
