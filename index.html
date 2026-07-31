@@ -4163,8 +4163,9 @@ function abrirExtratoAReceber() {
       if (falta > 0.004) {
         itens.push({ nome: c.nome, valor: falta, dataLabel: c.dia_pagamento ? `Todo dia ${c.dia_pagamento}` : 'Sem data fixa', tipo: 'Mensal', parcial: recebidoMes > 0 });
       }
-    } else if (tipo === 'freelance' && !c.freelance_pago) {
-      itens.push({ nome: c.nome, valor: parseFloat(c.valor_mensal||0), dataLabel: c.prazo_freelance ? `Prazo: ${fmtDate(c.prazo_freelance)}` : 'Sem prazo definido', tipo: 'Freela' });
+    } else if (tipo === 'freelance' && !_freelaCompleto(c)) {
+      const pend = _freelaPendente(c);
+      itens.push({ nome: c.nome, valor: pend, dataLabel: c.prazo_freelance ? `Prazo: ${fmtDate(c.prazo_freelance)}` : 'Sem prazo definido', tipo: 'Freela', parcial: _freelaRecebido(c) > 0 });
     }
     (c.extras_mensais||[]).forEach(e => {
       const recNoMes = (e.recebimentos||[]).some(r => r.mes === mesAtual);
