@@ -6248,12 +6248,12 @@ function editCliente(id) {
       </div>
     </div>
 
-    <!-- TOGGLE PARCELADO (so mensal) -->
-    <div id="parceladoToggleWrap" style="${isMensal?'':'display:none'}margin-bottom:14px">
+    <!-- TOGGLE PARCELADO -->
+    <div id="parceladoToggleWrap" style="margin-bottom:14px">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.85rem;color:var(--text2)">
         <input type="checkbox" id="clParcelado" onchange="_toggleParceladoForm()" ${isParcelado?'checked':''}
           style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
-        <span>&#x1F4C5; Pagamento parcelado (cliente paga em mais de uma vez no mês)</span>
+        <span>&#x1F4C5; Pagamento parcelado ${isMensal?'(cliente paga em mais de uma vez no mês)':'(cliente paga o freela em mais de uma vez)'}</span>
       </label>
     </div>
 
