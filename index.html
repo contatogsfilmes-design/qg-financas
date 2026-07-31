@@ -6034,15 +6034,17 @@ function renderClientesTodos(mesBase) {
                 </div>
               </div></div>`;
           } else {
-            const pago = !!c.freelance_pago;
+            const pago = _freelaCompleto(c);
+            const temParcelas = (c.parcelas_freela||[]).length > 0;
+            const parcial = !pago && temParcelas && _freelaRecebido(c) > 0;
             return `<div class="client-card" style="border-left:3px solid ${pago?'var(--green)':'var(--blue)'}">
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <div><div class="client-name">${c.nome} <span class="client-cat">${c.categoria||''}</span></div>
-                  <div style="font-size:0.82rem;color:var(--text2)">⚡ R$ ${fmtMoney(c.valor_mensal)} freela</div>
-                  <div style="font-size:0.72rem;color:${pago?'var(--green)':'var(--blue)'}">${pago?'✅ Pago':'⏳ Pendente'}</div>
+                  <div style="font-size:0.82rem;color:var(--text2)">⚡ R$ ${fmtMoney(_freelaTotal(c))} freela</div>
+                  <div style="font-size:0.72rem;color:${pago?'var(--green)':'var(--blue)'}">${pago?'✅ Pago':parcial?`⚡ Falta R$ ${fmtMoney(_freelaPendente(c))}`:'⏳ Pendente'}</div>
                 </div>
                 <div style="display:flex;gap:6px">
-                  ${!pago?`<button class="btn btn-primary btn-sm" onclick="confirmarFreelance('${c.id}')">✅</button>`:''}
+                  ${!pago && !temParcelas?`<button class="btn btn-primary btn-sm" onclick="confirmarFreelance('${c.id}')">✅</button>`:''}
                   <button class="btn btn-outline btn-sm" onclick="viewCliente('${c.id}')">👁️</button>
                 </div>
               </div></div>`;
