@@ -4346,7 +4346,7 @@ function _renderProjecaoCustos(perfilFiltro) {
   const headerReceita = isPrimario
     ? `<th style="text-align:right;font-size:0.65rem;color:var(--text3);letter-spacing:1px;padding:4px 6px">LÍQUIDO</th>`
     : '';
-  const freelancePend = db.clientes.filter(c => c.tipo_cobranca==='freelance' && !c.freelance_pago).reduce((a,c)=>a+parseFloat(c.valor_mensal||0),0);
+  const freelancePend = db.clientes.filter(c => c.tipo_cobranca==='freelance').reduce((a,c)=>a+_freelaPendente(c),0);
   const receitaInfo = isPrimario
     ? `<div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px">
         💵 Fixo/mês: <strong style="color:var(--green)">R$ ${fmtMoney(receitaFixa)}</strong>
