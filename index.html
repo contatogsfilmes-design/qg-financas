@@ -4304,8 +4304,8 @@ function _calcReceitaMes(mesStr) {
   // Freelances pendentes somam só no mês atual (são pontuais, não previsíveis no futuro)
   const freelance = mesStr === mesAtual
     ? db.clientes
-        .filter(c => c.tipo_cobranca === 'freelance' && !c.freelance_pago)
-        .reduce((a, c) => a + parseFloat(c.valor_mensal || 0), 0)
+        .filter(c => c.tipo_cobranca === 'freelance')
+        .reduce((a, c) => a + _freelaPendente(c), 0)
     : 0;
   return { fixo, freelance, total: fixo + freelance };
 }
