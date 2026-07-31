@@ -8277,8 +8277,8 @@ function _buildJuliusContext() {
       const rec  = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesAtual).reduce((a,p)=>a+parseFloat(p.valor||0),0);
       const vPend = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
       tot += Math.max(0, parseFloat(c.valor_mensal||0) - vPend - rec);
-    } else if (c.tipo_cobranca==='freelance' && !c.freelance_pago) {
-      tot += parseFloat(c.valor_mensal||0);
+    } else if (c.tipo_cobranca==='freelance') {
+      tot += _freelaPendente(c);
     }
     return tot;
   }, 0);
