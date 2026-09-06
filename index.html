@@ -990,7 +990,8 @@ let db = {
     tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
     tags_clientes: ['GS FILMES','Biel do QG'],
     bancos: ['Banco Inter','Nubank','Santander'],
-    groq_api_key: ''
+    groq_api_key: '',
+    anthropic_api_key: ''
   },
   gastos: [],
   custos_mensais: [],
@@ -1046,7 +1047,8 @@ function getDefaultDB() {
       tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
       tags_clientes: ['GS FILMES','Biel do QG'],
       bancos: [],
-      groq_api_key: ''
+      groq_api_key: '',
+      anthropic_api_key: ''
     },
     gastos: [], custos_mensais: [], investimentos: [], pendencias: [],
     bancos_saldo: [], cartao_compras: [], clientes: [], recebimentos: [], feedbacks: [],
@@ -1180,6 +1182,7 @@ async function loadUserKeys() {
     if (snap.exists) {
       const keys = snap.data();
       if (keys.groq_api_key) db.settings.groq_api_key = keys.groq_api_key;
+      if (keys.anthropic_api_key) db.settings.anthropic_api_key = keys.anthropic_api_key;
     }
   } catch(e) { console.warn('Erro ao carregar chaves:', e); }
 }
@@ -1189,6 +1192,12 @@ async function _saveGroqKeyToCloud(key) {
   if (!ref) return;
   // merge:true nunca apaga outros campos do documento
   await ref.set({ groq_api_key: key }, { merge: true });
+}
+
+async function _saveAnthropicKeyToCloud(key) {
+  const ref = userKeysDocRef();
+  if (!ref) return;
+  await ref.set({ anthropic_api_key: key }, { merge: true });
 }
 
 // Histórico do Julius — documento separado para não poluir os dados financeiros
@@ -7082,6 +7091,30 @@ function renderSettings() {
           </div>
         </div>
 
+        <!-- JULIUS IA — LEITURA DE EXTRATOS EM PDF -->
+        <div class="card">
+          <div class="card-title">🧠 IA JULIUS — LEITURA DE EXTRATOS (ANTHROPIC)</div>
+          <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px">
+            Com essa chave, o Julius passa a aceitar <strong style="color:var(--green)">PDF de extrato bancário</strong> direto no chat: você manda o PDF do Inter, Santander etc., diz qual banco é, e ele lê todas as transações, compara com o que você já lançou e importa só o que estiver faltando (sem duplicar).<br>
+            <span style="font-size:0.72rem;color:var(--text3);margin-top:4px;display:block">Chave <strong>paga</strong> (não é gratuita como a Groq) — crie em <strong>console.anthropic.com</strong>. Fica salva só na sua conta, do mesmo jeito que a chave Groq.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chave API Anthropic</label>
+            <input type="password" class="form-control" id="anthropicApiKey"
+              value="${db.settings.anthropic_api_key || ''}"
+              placeholder="sk-ant-...cole sua chave aqui">
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveAnthropicKey()">💾 Salvar</button>
+            <button class="btn btn-sm" style="border-color:var(--blue);color:var(--blue)" onclick="testAnthropicKey()">🔍 Testar Chave</button>
+            <span id="anthropicKeyStatus" style="font-size:0.78rem">
+              ${db.settings.anthropic_api_key
+                ? '<span style="color:var(--text3)">✅ Chave salva — clique em Testar para validar</span>'
+                : '<span style="color:var(--text3)">⚠️ Chave não configurada — sem ela, PDF de extrato continua bloqueado</span>'}
+            </span>
+          </div>
+        </div>
+
         <!-- SOBRE -->
         <div class="card">
           <div class="card-title">ℹ️ SOBRE</div>
@@ -8152,13 +8185,17 @@ async function sendJuliusMessage() {
   const text = input.value.trim();
   if (!text) return;
 
-  const key = db.settings.groq_api_key;
-  if (!key) {
-    _juliusAppend('julius', '⚙️ Configura sua chave Groq primeiro! Vai em Configurações → IA Julius (Groq).');
-    return;
+  const isPdfAttached = !!juliusAttachedImage?.isPdf;
+
+  if (!isPdfAttached) {
+    const key = db.settings.groq_api_key;
+    if (!key) {
+      _juliusAppend('julius', '⚙️ Configura sua chave Groq primeiro! Vai em Configurações → IA Julius (Groq).');
+      return;
+    }
   }
 
-  // Captura imagem antes de limpar
+  // Captura anexo antes de limpar
   const imageDataUrl = juliusAttachedImage?.dataUrl || null;
   const imageName    = juliusAttachedImage?.name || '';
   juliusRemoveAttachment();
@@ -8168,15 +8205,31 @@ async function sendJuliusMessage() {
   input.value = '';
   input.style.height = 'auto';
 
-  // Exibe mensagem do usuário (com thumbnail se houver imagem)
+  // Exibe mensagem do usuário (com thumbnail/marcador se houver anexo)
   const safeText = text.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-  const userHtml = imageDataUrl
-    ? `<img src="${imageDataUrl}" class="julius-chat-img" alt="comprovante"><span style="font-size:0.72rem;color:var(--text3);display:block;margin-bottom:4px">📎 ${imageName}</span>${safeText}`
-    : safeText;
+  const userHtml = !imageDataUrl ? safeText
+    : isPdfAttached
+      ? `<span style="font-size:0.78rem;color:var(--text3);display:block;margin-bottom:4px">📄 ${imageName}</span>${safeText}`
+      : `<img src="${imageDataUrl}" class="julius-chat-img" alt="comprovante"><span style="font-size:0.72rem;color:var(--text3);display:block;margin-bottom:4px">📎 ${imageName}</span>${safeText}`;
   _juliusAppend('user', userHtml);
 
   _juliusTypingStart();
 
+  if (isPdfAttached) {
+    try {
+      await _processarExtratoPDF(text, imageDataUrl);
+    } catch(e) {
+      _juliusTypingStop();
+      _juliusAppend('julius', `❌ Erro ao ler o extrato: <em>${e.message}</em>`);
+    } finally {
+      juliusSending = false;
+      if (sendBtn) sendBtn.disabled = false;
+      input.focus();
+    }
+    return;
+  }
+
+  const key = db.settings.groq_api_key;
   try {
     let userTextFinal = text;
 
@@ -8468,6 +8521,185 @@ function _tryVisionModel(apiKey, model, imageDataUrl) {
   });
 }
 
+// ── Extrato bancário em PDF — via Anthropic (Groq não lê PDF) ────
+// Modelo fixo em Opus (melhor precisão pra extração financeira). Troque aqui se quiser outro.
+const _EXTRATO_PDF_MODEL = 'claude-opus-5';
+
+function _buildExtratoPrompt(userText, bancosList) {
+  const bancosJSON = JSON.stringify(
+    bancosList.map(b => ({ id: b.id, nome: b.nome, tipo: b.tipo })),
+    null, 2
+  );
+  return `Você vai analisar um EXTRATO BANCÁRIO em PDF anexado e extrair TODAS as transações dele.
+
+O usuário disse sobre esse extrato: "${userText}"
+
+BANCOS CADASTRADOS NO APP (escolha o "id" que corresponde ao banco/conta deste extrato, cruzando o nome do banco que aparece no PDF com o que o usuário disse):
+${bancosJSON}
+
+REGRAS:
+1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente).
+2. Para cada transação, classifique "tipo" como "gasto" (saída/débito/compra) ou "entrada" (crédito/recebimento/depósito).
+3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal).
+4. "data" no formato YYYY-MM-DD. Se o extrato não indicar o ano, assuma ${new Date().getFullYear()}.
+5. "descricao": texto curto baseado no extrato (ex: "Pix recebido João", "Compra Supermercado X"), sem repetir o valor.
+6. Se tiver certeza de qual banco da lista acima é esse extrato, retorne o "id" dele em "banco_id". Se não tiver certeza, retorne "banco_id": null e explique em "pergunta" qual informação falta.
+7. Ignore linhas de saldo do dia, totalizadores, ou qualquer coisa que não seja uma transação individual.
+
+Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou depois:
+<extrato_json>
+{
+  "banco_id": "id do banco ou null",
+  "periodo": "descrição curta do período do extrato, ex: 01/08/2026 a 31/08/2026",
+  "pergunta": "preencha só se banco_id for null, perguntando ao usuário qual banco é",
+  "transacoes": [
+    { "data": "2026-08-05", "valor": 49.90, "tipo": "gasto", "descricao": "Compra Supermercado X" }
+  ]
+}
+</extrato_json>`;
+}
+
+function _callAnthropicPDF(apiKey, base64Pdf, promptText) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      model: _EXTRATO_PDF_MODEL,
+      max_tokens: 16000,
+      output_config: { effort: 'high' },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } },
+          { type: 'text', text: promptText }
+        ]
+      }]
+    });
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://api.anthropic.com/v1/messages', true);
+    xhr.setRequestHeader('x-api-key', apiKey);
+    xhr.setRequestHeader('anthropic-version', '2023-06-01');
+    // Chamada direta do navegador (app pessoal, sem backend) — igual já é feito com a chave Groq
+    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access', 'true');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = 120000; // extrato grande demora mais que um comprovante único
+
+    xhr.onload = () => {
+      const raw = xhr.responseText || '';
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(raw);
+          const textBlock = (data.content || []).find(b => b.type === 'text');
+          if (!textBlock) throw new Error('Resposta sem texto');
+          resolve(textBlock.text);
+        } catch(e) {
+          reject(new Error(e.message || 'Resposta inválida da Anthropic'));
+        }
+      } else {
+        let msg = `Erro HTTP ${xhr.status}`;
+        try {
+          const errData = JSON.parse(raw);
+          msg = errData?.error?.message || msg;
+          if (xhr.status === 401) msg = 'Chave Anthropic inválida. Verifique em Configurações.';
+          if (xhr.status === 429) msg = 'Limite de requisições atingido. Aguarde um pouco.';
+        } catch(e) {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror   = () => reject(new Error('Falha de rede. Verifique sua conexão.'));
+    xhr.ontimeout = () => reject(new Error('Timeout — extrato muito grande ou conexão lenta.'));
+    xhr.send(body);
+  });
+}
+
+function _parseExtratoResponse(raw) {
+  const m = raw.match(/<extrato_json>([\s\S]*?)<\/extrato_json>/i);
+  const jsonStr = m ? m[1].trim() : raw.trim();
+  return JSON.parse(jsonStr);
+}
+
+async function _processarExtratoPDF(userText, dataUrl) {
+  const apiKey = db.settings.anthropic_api_key;
+  if (!apiKey) {
+    _juliusTypingStop();
+    _juliusAppend('julius', '⚙️ Configura sua chave Anthropic primeiro! Vai em Configurações → IA Julius (Anthropic).');
+    return;
+  }
+
+  _juliusTypingStop();
+  const _kbPdf = Math.round(dataUrl.length * 0.75 / 1024);
+  _juliusAppend('julius', `📄 Lendo extrato em PDF (~${_kbPdf}KB) com o Claude, pode levar um tempinho...`);
+  _juliusTypingStart();
+
+  const base64Pdf = dataUrl.split(',')[1] || '';
+  const prompt = _buildExtratoPrompt(userText, db.bancos_saldo);
+
+  let raw;
+  try {
+    raw = await _callAnthropicPDF(apiKey, base64Pdf, prompt);
+  } finally {
+    _juliusTypingStop();
+  }
+
+  let parsed;
+  try {
+    parsed = _parseExtratoResponse(raw);
+  } catch(e) {
+    console.warn('[Julius] Extrato raw:', raw);
+    _juliusAppend('julius', '⚠️ Não consegui interpretar a leitura do extrato. Tenta de novo ou manda um período menor.');
+    return;
+  }
+
+  if (!parsed.banco_id) {
+    _juliusAppend('julius', parsed.pergunta || 'Não consegui identificar o banco desse extrato. Qual banco é? Reanexa o PDF e me diz no texto.');
+    return;
+  }
+
+  const banco = db.bancos_saldo.find(b => b.id === parsed.banco_id);
+  if (!banco) {
+    _juliusAppend('julius', '⚠️ O banco que identifiquei no PDF não bate com nenhum cadastrado em Bancos/Contas. Cadastra o banco primeiro.');
+    return;
+  }
+
+  const transacoes = Array.isArray(parsed.transacoes) ? parsed.transacoes : [];
+  if (transacoes.length === 0) {
+    _juliusAppend('julius', `📄 Não encontrei transações nesse PDF do ${banco.nome}. Confere se é mesmo um extrato com movimentações.`);
+    return;
+  }
+
+  // Conciliação: só importa o que ainda não está lançado pra esse banco (evita duplicar)
+  const existentesGasto   = db.gastos.filter(g => g.banco_id === banco.id);
+  const existentesEntrada = db.entradas_caixa.filter(e => e.banco_id === banco.id);
+  const _bate = (lista, data, valor) => lista.some(x => x.data === data && Math.abs(parseFloat(x.valor) - parseFloat(valor)) < 0.01);
+
+  const novas = [];
+  let duplicadas = 0;
+  for (const t of transacoes) {
+    if (!t.data || !t.valor || !t.tipo) continue;
+    const existentes = t.tipo === 'entrada' ? existentesEntrada : existentesGasto;
+    if (_bate(existentes, t.data, t.valor)) { duplicadas++; continue; }
+    novas.push(t);
+  }
+
+  const formaRaw = banco.tipo === 'credito' ? ('cred_' + banco.id) : banco.id;
+  const actions = novas.map(t => t.tipo === 'entrada'
+    ? { tipo: 'add_entrada', dados: { valor: t.valor, descricao: t.descricao || 'Importado do extrato', categoria: 'Outro', banco_id: banco.id, data: t.data } }
+    : { tipo: 'add_gasto', dados: { valor: t.valor, descricao: t.descricao || 'Importado do extrato', forma_raw: formaRaw, data: t.data, tag: 'Extrato importado' } }
+  );
+
+  if (actions.length > 0) _executeJuliusActions(actions);
+
+  const resumoMsg = `📄 <strong>Extrato ${banco.nome}</strong>${parsed.periodo ? ' (' + parsed.periodo + ')' : ''}: ${transacoes.length} transações encontradas.<br>` +
+    `✅ ${novas.length} nova${novas.length === 1 ? '' : 's'} importada${novas.length === 1 ? '' : 's'}.` +
+    (duplicadas > 0 ? `<br>⏭️ ${duplicadas} já estava${duplicadas === 1 ? '' : 'm'} lançada${duplicadas === 1 ? '' : 's'} (ignorei pra não duplicar).` : '');
+  _juliusAppend('julius', resumoMsg);
+
+  // Guarda no histórico do Julius pra manter contexto nas próximas mensagens do chat
+  juliusHistory.push({ role: 'user', content: `[IMPORTOU EXTRATO PDF do banco ${banco.nome}]\n${userText}` });
+  juliusHistory.push({ role: 'assistant', content: resumoMsg.replace(/<[^>]+>/g, ' ').trim() });
+  _saveJuliusHistory();
+  if (juliusHistory.length > 60) juliusHistory = juliusHistory.slice(-50);
+}
+
 // ── Passo 2: chat normal — sem imagem, só texto ───────────────
 function _callGroq(apiKey, history) {
   const messages = [
@@ -8692,11 +8924,30 @@ async function juliusFileSelected(event) {
   if (!file) return;
 
   if (file.type === 'application/pdf') {
-    _juliusAppend('julius', '📄 PDF não funciona direto. Tire um <strong>print/screenshot</strong> do extrato e manda a imagem — funciona muito melhor!');
+    if (!db.settings.anthropic_api_key) {
+      _juliusAppend('julius', '📄 Pra ler PDF de extrato eu preciso da chave da <strong>Anthropic</strong>. Vai em Configurações → IA Julius (Anthropic) e cola sua chave — ou tira um print do extrato que eu leio na hora.');
+      return;
+    }
+    if (file.size > 28 * 1024 * 1024) {
+      _juliusAppend('julius', '📄 Esse PDF tá grande demais (máx ~28MB). Manda um extrato de período menor.');
+      return;
+    }
+    _juliusAppend('julius', '📄 Carregando PDF...');
+    const reader = new FileReader();
+    reader.onload = e => {
+      juliusAttachedImage = { dataUrl: e.target.result, name: file.name, isPdf: true };
+      _juliusShowPreview(e.target.result, file.name, true);
+      const msgs = document.getElementById('julius-messages');
+      if (msgs?.lastElementChild?.textContent?.includes('Carregando PDF')) {
+        msgs.lastElementChild.remove();
+      }
+    };
+    reader.onerror = () => _juliusAppend('julius', '❌ Erro ao ler o arquivo. Tente de novo.');
+    reader.readAsDataURL(file);
     return;
   }
   if (!file.type.startsWith('image/')) {
-    _juliusAppend('julius', '📎 Manda uma <strong>foto ou print</strong> do comprovante (JPEG, PNG, WEBP).');
+    _juliusAppend('julius', '📎 Manda uma <strong>foto/print</strong> de comprovante ou um <strong>PDF</strong> de extrato.');
     return;
   }
 
@@ -8716,10 +8967,21 @@ async function juliusFileSelected(event) {
   reader.readAsDataURL(file);
 }
 
-function _juliusShowPreview(dataUrl, name) {
+function _juliusShowPreview(dataUrl, name, isPdf) {
   const wrap = document.getElementById('julius-preview');
   if (!wrap) return;
   wrap.style.display = 'block';
+  if (isPdf) {
+    wrap.innerHTML = `
+      <div class="julius-preview-img" style="display:flex;align-items:center;gap:8px;padding:8px 10px">
+        <span style="font-size:1.4rem">📄</span>
+        <span style="font-size:0.78rem;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${name || 'extrato.pdf'}</span>
+        <button class="julius-preview-remove" onclick="juliusRemoveAttachment()" title="Remover" style="position:static">✕</button>
+      </div>
+      <div style="font-size:0.68rem;color:var(--text3);margin-top:3px">📄 Diz qual banco é esse extrato na mensagem (ex: "extrato do Inter de agosto")</div>
+    `;
+    return;
+  }
   wrap.innerHTML = `
     <div class="julius-preview-img">
       <img src="${dataUrl}" alt="${name || 'comprovante'}">
@@ -8947,6 +9209,57 @@ async function testGroqKey() {
   }
 }
 
+async function saveAnthropicKey() {
+  const key = document.getElementById('anthropicApiKey')?.value.trim();
+  if (!key) { alert('Cole sua chave API da Anthropic antes de salvar.'); return; }
+  if (!key.startsWith('sk-ant-')) {
+    alert('Chave inválida. A chave Anthropic começa com "sk-ant-". Copie direto do console.anthropic.com.');
+    return;
+  }
+  const status = document.getElementById('anthropicKeyStatus');
+  if (status) status.innerHTML = '<span style="color:var(--text3)">⏳ Salvando...</span>';
+  try {
+    db.settings.anthropic_api_key = key;
+    await _saveAnthropicKeyToCloud(key);
+    await writeToCloud();
+    if (status) status.innerHTML = '<span style="color:var(--green)">✅ Salva na sua conta — vale em todos os dispositivos!</span>';
+    setTimeout(() => testAnthropicKey(), 500);
+  } catch(e) {
+    if (status) status.innerHTML = `<span style="color:var(--red)">❌ Erro ao salvar: ${e.message}</span>`;
+  }
+}
+
+async function testAnthropicKey() {
+  const status = document.getElementById('anthropicKeyStatus');
+  const key = db.settings.anthropic_api_key;
+  if (!key) {
+    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Nenhuma chave salva</span>';
+    return;
+  }
+  if (status) status.innerHTML = '<span style="color:var(--text3)">🔄 Testando...</span>';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/models', {
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      }
+    });
+    if (res.ok) {
+      if (status) status.innerHTML = '<span style="color:var(--green)">✅ Chave válida — leitura de extrato em PDF liberada!</span>';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.error?.message || `Erro ${res.status}`;
+      if (status) status.innerHTML = `<span style="color:var(--red)">❌ ${msg}</span>`;
+      if (res.status === 401) {
+        if (status) status.innerHTML = '<span style="color:var(--red)">❌ Chave inválida — gere uma nova em console.anthropic.com</span>';
+      }
+    }
+  } catch(e) {
+    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Sem conexão para testar</span>';
+  }
+}
+
 function juliusKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendJuliusMessage(); }
 }
@@ -8969,11 +9282,11 @@ function juliusKeydown(e) {
     <button class="julius-header-close" onclick="toggleJulius()" title="Fechar">✕</button>
   </div>
   <!-- input file fora da área dos botões para não interferir nos toques mobile -->
-  <input type="file" id="julius-file-input" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="juliusFileSelected(event)">
+  <input type="file" id="julius-file-input" accept="image/*,application/pdf" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="juliusFileSelected(event)">
   <div id="julius-messages"></div>
   <div id="julius-preview"></div>
   <div class="julius-input-wrap">
-    <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Foto do comprovante">📎</button>
+    <button class="julius-action-btn" id="julius-attach" onclick="juliusAttachClick()" title="Foto do comprovante ou PDF de extrato">📎</button>
     <button class="julius-action-btn julius-mic-btn" id="julius-mic" onclick="juliusToggleMic()" title="Gravar áudio">🎤</button>
     <textarea
       id="julius-input"
