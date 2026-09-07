@@ -2642,7 +2642,7 @@ async function _onExtratoDashboardSelected(event, bancoId) {
     <div style="text-align:center;padding:30px 10px">
       <div style="font-size:2rem;margin-bottom:10px">⏳</div>
       <div style="color:var(--text2)">Lendo o PDF com o Claude e conciliando com o que já está lançado...</div>
-      <div style="font-size:0.72rem;color:var(--text3);margin-top:8px">Isso pode levar até 1 minuto</div>
+      <div id="extratoProgresso" style="font-size:0.72rem;color:var(--text3);margin-top:8px">Extrato grande pode levar alguns minutos — não feche essa tela</div>
     </div>
   `, true);
 
@@ -2652,7 +2652,10 @@ async function _onExtratoDashboardSelected(event, bancoId) {
     const base64Pdf = dataUrl.split(',')[1] || '';
     try {
       const prompt = _buildExtratoPromptBancoConhecido(banco);
-      const raw = await _callAnthropicPDF(db.settings.anthropic_api_key, base64Pdf, prompt);
+      const raw = await _callAnthropicPDF(db.settings.anthropic_api_key, base64Pdf, prompt, (chars) => {
+        const el = document.getElementById('extratoProgresso');
+        if (el) el.textContent = `Recebendo resposta... (~${chars} caracteres lidos)`;
+      });
       const parsed = _parseExtratoResponse(raw);
       const transacoes = Array.isArray(parsed.transacoes) ? parsed.transacoes : [];
 
@@ -8626,13 +8629,13 @@ BANCOS CADASTRADOS NO APP (escolha o "id" que corresponde ao banco/conta deste e
 ${bancosJSON}
 
 REGRAS:
-1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente).
-2. Para cada transação, classifique "tipo" como "gasto" (saída/débito/compra) ou "entrada" (crédito/recebimento/depósito).
-3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal).
+1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente). Extratos reais têm muitas transações — às vezes 100, 200 ou mais. Se tiver 2 linhas com mesma data e mesmo valor, são DUAS transações reais e diferentes — inclua as duas, não deduplique.
+2. Para cada transação, classifique "tipo" como "gasto" (saída/débito/compra/pagamento de fatura de cartão de crédito) ou "entrada" (crédito/recebimento/depósito/"Pix enviado devolvido" ou estorno).
+3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal) — olhe o sinal (+/-) ou a cor/coluna do extrato pra saber se é entrada ou gasto, não adivinhe pela descrição.
 4. "data" no formato YYYY-MM-DD. Se o extrato não indicar o ano, assuma ${new Date().getFullYear()}.
 5. "descricao": texto curto baseado no extrato (ex: "Pix recebido João", "Compra Supermercado X"), sem repetir o valor.
 6. Se tiver certeza de qual banco da lista acima é esse extrato, retorne o "id" dele em "banco_id". Se não tiver certeza, retorne "banco_id": null e explique em "pergunta" qual informação falta.
-7. Ignore linhas de saldo do dia, totalizadores, ou qualquer coisa que não seja uma transação individual.
+7. Ignore linhas de "saldo do dia", totalizadores, cabeçalho/rodapé, ou qualquer coisa que não seja uma transação individual.
 
 Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou depois:
 <extrato_json>
@@ -8647,56 +8650,97 @@ Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou dep
 </extrato_json>`;
 }
 
-function _callAnthropicPDF(apiKey, base64Pdf, promptText) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      model: _EXTRATO_PDF_MODEL,
-      max_tokens: 16000,
-      output_config: { effort: 'high' },
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } },
-          { type: 'text', text: promptText }
-        ]
-      }]
-    });
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://api.anthropic.com/v1/messages', true);
-    xhr.setRequestHeader('x-api-key', apiKey);
-    xhr.setRequestHeader('anthropic-version', '2023-06-01');
-    // Chamada direta do navegador (app pessoal, sem backend) — igual já é feito com a chave Groq
-    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access', 'true');
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.timeout = 120000; // extrato grande demora mais que um comprovante único
-
-    xhr.onload = () => {
-      const raw = xhr.responseText || '';
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(raw);
-          const textBlock = (data.content || []).find(b => b.type === 'text');
-          if (!textBlock) throw new Error('Resposta sem texto');
-          resolve(textBlock.text);
-        } catch(e) {
-          reject(new Error(e.message || 'Resposta inválida da Anthropic'));
-        }
-      } else {
-        let msg = `Erro HTTP ${xhr.status}`;
-        try {
-          const errData = JSON.parse(raw);
-          msg = errData?.error?.message || msg;
-          if (xhr.status === 401) msg = 'Chave Anthropic inválida. Verifique em Configurações.';
-          if (xhr.status === 429) msg = 'Limite de requisições atingido. Aguarde um pouco.';
-        } catch(e) {}
-        reject(new Error(msg));
-      }
-    };
-    xhr.onerror   = () => reject(new Error('Falha de rede. Verifique sua conexão.'));
-    xhr.ontimeout = () => reject(new Error('Timeout — extrato muito grande ou conexão lenta.'));
-    xhr.send(body);
+// Streaming (SSE) em vez de request bloqueante — um extrato grande + esforço alto do
+// modelo pode legitimamente passar de 2-3min, e um XHR com timeout curto cortava a
+// leitura no meio antes de terminar. Com stream não há teto artificial de tempo,
+// só um limite de segurança bem folgado via AbortController.
+async function _callAnthropicPDF(apiKey, base64Pdf, promptText, onProgress) {
+  const body = JSON.stringify({
+    model: _EXTRATO_PDF_MODEL,
+    max_tokens: 24000, // extrato real pode ter 200+ transações — JSON de saída fica grande
+    stream: true,
+    output_config: { effort: 'high' },
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } },
+        { type: 'text', text: promptText }
+      ]
+    }]
   });
+
+  const controller = new AbortController();
+  const safetyTimeout = setTimeout(() => controller.abort(), 6 * 60 * 1000); // 6min — só rede de fato travada
+
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        // Chamada direta do navegador (app pessoal, sem backend) — igual já é feito com a chave Groq
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'Content-Type': 'application/json'
+      },
+      body,
+      signal: controller.signal
+    });
+  } catch(e) {
+    clearTimeout(safetyTimeout);
+    if (e.name === 'AbortError') throw new Error('Demorou demais (mais de 6min) — tenta um extrato de período menor.');
+    throw new Error('Falha de rede. Verifique sua conexão.');
+  }
+
+  if (!res.ok) {
+    clearTimeout(safetyTimeout);
+    let msg = `Erro HTTP ${res.status}`;
+    try {
+      const errData = await res.json();
+      msg = errData?.error?.message || msg;
+      if (res.status === 401) msg = 'Chave Anthropic inválida. Verifique em Configurações.';
+      if (res.status === 429) msg = 'Limite de requisições atingido. Aguarde um pouco.';
+    } catch(e) {}
+    throw new Error(msg);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // linha incompleta fica pro próximo pedaço
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const dataStr = line.slice(6).trim();
+        if (!dataStr) continue;
+        let evt;
+        try { evt = JSON.parse(dataStr); } catch(e) { continue; }
+
+        if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+          fullText += evt.delta.text;
+          if (onProgress) onProgress(fullText.length);
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error?.message || 'Erro no streaming da Anthropic');
+        }
+      }
+    }
+  } catch(e) {
+    if (e.name === 'AbortError') throw new Error('Demorou demais (mais de 6min) — tenta um extrato de período menor.');
+    throw e;
+  } finally {
+    clearTimeout(safetyTimeout);
+  }
+
+  if (!fullText) throw new Error('Resposta vazia da Anthropic');
+  return fullText;
 }
 
 function _parseExtratoResponse(raw) {
@@ -8714,12 +8758,12 @@ function _buildExtratoPromptBancoConhecido(banco) {
 Esse extrato é da conta "${banco.nome}" (${isCredito ? 'cartão de crédito — extrato/fatura' : 'conta corrente/débito'}).
 
 REGRAS:
-1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente).
-2. Para cada transação, classifique "tipo" como "gasto" (compra/saída/débito) ou "entrada" (crédito/recebimento/depósito${isCredito ? '/pagamento da fatura recebido/estorno' : ''}).
-3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal).
+1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente). Extratos reais têm muitas transações — às vezes 100, 200 ou mais. Se tiver 2 linhas com mesma data e mesmo valor (ex: dois débitos de R$ 20,00 no mesmo dia em estabelecimentos parecidos), são DUAS transações reais e diferentes — inclua as duas, não deduplique.
+2. Para cada transação, classifique "tipo" como "gasto" (compra/saída/débito${!isCredito ? '/pagamento de fatura de cartão de crédito feito por essa conta' : ''}) ou "entrada" (crédito/recebimento/depósito/"Pix enviado devolvido" ou estorno${isCredito ? '/pagamento da fatura recebido' : ''}).
+3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal) — olhe o sinal (+/-) ou a cor/coluna do extrato pra saber se é entrada ou gasto, não adivinhe pela descrição.
 4. "data" no formato YYYY-MM-DD. Se o extrato não indicar o ano, assuma ${new Date().getFullYear()}.
-5. "descricao": texto curto baseado no extrato, sem repetir o valor.
-6. Ignore linhas de saldo do dia, totalizadores, ou qualquer coisa que não seja uma transação individual.
+5. "descricao": texto curto baseado no extrato (nome de quem pagou/recebeu ou do estabelecimento), sem repetir o valor.
+6. Ignore linhas de "saldo do dia", totalizadores, cabeçalho/rodapé, ou qualquer coisa que não seja uma transação individual.
 
 Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou depois:
 <extrato_json>
@@ -8738,12 +8782,23 @@ function _conciliarEImportarExtrato(banco, transacoes) {
   const isCredito = banco.tipo === 'credito';
   const hora = new Date().toTimeString().substring(0,5);
 
-  const existentesGasto = isCredito
+  // Pools MUTÁVEIS dos lançamentos já existentes — cada um só pode "casar" com UMA transação
+  // do PDF. Sem isso, duas transações reais idênticas (mesma data+valor, comuns em extrato real —
+  // ex: dois débitos de R$ 20 no mesmo dia) colidiam com o mesmo lançamento antigo e uma delas
+  // sumia por engano, mesmo sendo uma transação nova de verdade.
+  const poolGasto = (isCredito
     ? (db.cartao_compras || []).filter(c => c.cartao_id === banco.id)
-    : db.gastos.filter(g => g.banco_id === banco.id);
-  const existentesEntrada = db.entradas_caixa.filter(e => e.banco_id === banco.id);
+    : db.gastos.filter(g => g.banco_id === banco.id)
+  ).map(x => ({ data: x.data, valor: parseFloat(x.valor) }));
+  const poolEntrada = db.entradas_caixa.filter(e => e.banco_id === banco.id)
+    .map(x => ({ data: x.data, valor: parseFloat(x.valor) }));
 
-  const _bate = (lista, data, valor) => lista.some(x => x.data === data && Math.abs(parseFloat(x.valor) - parseFloat(valor)) < 0.01);
+  const _consumirSeExistir = (pool, data, valor) => {
+    const idx = pool.findIndex(x => x.data === data && Math.abs(x.valor - valor) < 0.01);
+    if (idx === -1) return false;
+    pool.splice(idx, 1); // consome — a próxima transação igual não pode casar com o mesmo item
+    return true;
+  };
 
   let novasGasto = 0, novasEntrada = 0, duplicadas = 0, ignoradasFatura = 0;
 
@@ -8753,7 +8808,7 @@ function _conciliarEImportarExtrato(banco, transacoes) {
 
     if (t.tipo === 'entrada') {
       if (isCredito) { ignoradasFatura++; continue; } // pagamento de fatura de cartão — usar "Pagar Fatura" no app
-      if (_bate(existentesEntrada, t.data, valor)) { duplicadas++; continue; }
+      if (_consumirSeExistir(poolEntrada, t.data, valor)) { duplicadas++; continue; }
       banco.saldo = parseFloat(banco.saldo||0) + valor;
       db.entradas_caixa.push({
         id: uid(), data: t.data, hora, valor,
@@ -8765,7 +8820,7 @@ function _conciliarEImportarExtrato(banco, transacoes) {
     }
 
     // tipo === 'gasto'
-    if (_bate(existentesGasto, t.data, valor)) { duplicadas++; continue; }
+    if (_consumirSeExistir(poolGasto, t.data, valor)) { duplicadas++; continue; }
     if (isCredito) {
       _registrarCompraCredito(banco.id, t.data, valor, t.descricao || 'Importado do extrato', 'Extrato importado');
     } else {
