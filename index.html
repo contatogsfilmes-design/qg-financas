@@ -990,7 +990,6 @@ let db = {
     tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
     tags_clientes: ['GS FILMES','Biel do QG'],
     bancos: ['Banco Inter','Nubank','Santander'],
-    groq_api_key: '',
     anthropic_api_key: ''
   },
   gastos: [],
@@ -1047,7 +1046,6 @@ function getDefaultDB() {
       tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
       tags_clientes: ['GS FILMES','Biel do QG'],
       bancos: [],
-      groq_api_key: '',
       anthropic_api_key: ''
     },
     gastos: [], custos_mensais: [], investimentos: [], pendencias: [],
@@ -1181,17 +1179,9 @@ async function loadUserKeys() {
     const snap = await ref.get();
     if (snap.exists) {
       const keys = snap.data();
-      if (keys.groq_api_key) db.settings.groq_api_key = keys.groq_api_key;
       if (keys.anthropic_api_key) db.settings.anthropic_api_key = keys.anthropic_api_key;
     }
   } catch(e) { console.warn('Erro ao carregar chaves:', e); }
-}
-
-async function _saveGroqKeyToCloud(key) {
-  const ref = userKeysDocRef();
-  if (!ref) return;
-  // merge:true nunca apaga outros campos do documento
-  await ref.set({ groq_api_key: key }, { merge: true });
 }
 
 async function _saveAnthropicKeyToCloud(key) {
@@ -7214,36 +7204,13 @@ function renderSettings() {
           </div>
         </div>
 
-        <!-- JULIUS IA -->
+        <!-- JULIUS IA (ANTHROPIC) -->
         <div class="card">
-          <div class="card-title">🤖 IA JULIUS (GROQ)</div>
+          <div class="card-title">🤖 IA JULIUS (ANTHROPIC — CLAUDE)</div>
           <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px">
-            O <strong style="color:var(--green)">Julius</strong> é seu consultor financeiro pessoal com IA. Registra gastos por conversa, questiona se vale a pena gastar e monitora seu saldo.<br>
-            <span style="font-size:0.72rem;color:var(--text3);margin-top:4px;display:block">A chave Groq é <strong>gratuita</strong> — crie em <strong>console.groq.com</strong></span>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Chave API Groq</label>
-            <input type="password" class="form-control" id="groqApiKey"
-              value="${db.settings.groq_api_key || ''}"
-              placeholder="gsk_...cole sua chave aqui">
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="saveGroqKey()">💾 Salvar</button>
-            <button class="btn btn-sm" style="border-color:var(--blue);color:var(--blue)" onclick="testGroqKey()">🔍 Testar Chave</button>
-            <span id="groqKeyStatus" style="font-size:0.78rem">
-              ${db.settings.groq_api_key
-                ? '<span style="color:var(--text3)">✅ Chave salva — clique em Testar para validar</span>'
-                : '<span style="color:var(--text3)">⚠️ Chave não configurada</span>'}
-            </span>
-          </div>
-        </div>
-
-        <!-- JULIUS IA — LEITURA DE EXTRATOS EM PDF -->
-        <div class="card">
-          <div class="card-title">🧠 IA JULIUS — LEITURA DE EXTRATOS (ANTHROPIC)</div>
-          <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px">
-            Com essa chave, o Julius passa a aceitar <strong style="color:var(--green)">PDF de extrato bancário</strong> direto no chat: você manda o PDF do Inter, Santander etc., diz qual banco é, e ele lê todas as transações, compara com o que você já lançou e importa só o que estiver faltando (sem duplicar).<br>
-            <span style="font-size:0.72rem;color:var(--text3);margin-top:4px;display:block">Chave <strong>paga</strong> (não é gratuita como a Groq) — crie em <strong>console.anthropic.com</strong>. Fica salva só na sua conta, do mesmo jeito que a chave Groq.</span>
+            O <strong style="color:var(--green)">Julius</strong> é seu consultor financeiro pessoal com IA. Registra gastos por conversa, questiona se vale a pena gastar, monitora seu saldo, lê comprovante em foto e extrato bancário inteiro em PDF ou texto colado.<br><br>
+            Uma chave só, dois modelos por trás: <strong>Claude Haiku</strong> pro dia a dia (chat, comprovante) — rápido e barato — e <strong>Claude Sonnet</strong> pra tarefa pesada (ler um extrato inteiro com centenas de transações).<br>
+            <span style="font-size:0.72rem;color:var(--text3);margin-top:4px;display:block">Chave <strong>paga</strong> (uso é bem barato pro dia a dia) — crie em <strong>console.anthropic.com</strong>.</span>
           </div>
           <div class="form-group">
             <label class="form-label">Chave API Anthropic</label>
@@ -7257,7 +7224,7 @@ function renderSettings() {
             <span id="anthropicKeyStatus" style="font-size:0.78rem">
               ${db.settings.anthropic_api_key
                 ? '<span style="color:var(--text3)">✅ Chave salva — clique em Testar para validar</span>'
-                : '<span style="color:var(--text3)">⚠️ Chave não configurada — sem ela, PDF de extrato continua bloqueado</span>'}
+                : '<span style="color:var(--text3)">⚠️ Chave não configurada — sem ela o Julius não funciona</span>'}
             </span>
           </div>
         </div>
@@ -8239,8 +8206,7 @@ let juliusOpen = false;
 let juliusHistory = [];
 let juliusSending = false;
 let juliusAttachedImage = null;   // { dataUrl, name }
-let juliusMediaRecorder = null;
-let juliusAudioChunks = [];
+let juliusRecognition = null;
 let juliusRecording = false;
 
 function toggleJulius() {
@@ -8259,12 +8225,12 @@ function toggleJulius() {
 }
 
 function _juliusWelcome() {
-  const key = db.settings.groq_api_key;
+  const key = db.settings.anthropic_api_key;
   if (!key) {
     _juliusAppend('julius',
       `Oi! Sou o <strong>Julius</strong>, seu consultor financeiro pessoal. 💰<br><br>` +
-      `Antes de começar, preciso da sua chave da API Groq — é de graça, eu juro!<br><br>` +
-      `👉 Vai em <strong>Configurações → IA Julius (Groq)</strong>, cola sua chave e volta aqui.`
+      `Antes de começar, preciso da sua chave da API Anthropic.<br><br>` +
+      `👉 Vai em <strong>Configurações → IA Julius (Anthropic)</strong>, cola sua chave e volta aqui.`
     );
     return;
   }
@@ -8335,9 +8301,9 @@ async function sendJuliusMessage() {
   const isPdfAttached = !!juliusAttachedImage?.isPdf;
 
   if (!isPdfAttached) {
-    const key = db.settings.groq_api_key;
+    const key = db.settings.anthropic_api_key;
     if (!key) {
-      _juliusAppend('julius', '⚙️ Configura sua chave Groq primeiro! Vai em Configurações → IA Julius (Groq).');
+      _juliusAppend('julius', '⚙️ Configura sua chave Anthropic primeiro! Vai em Configurações → IA Julius (Anthropic).');
       return;
     }
   }
@@ -8376,7 +8342,7 @@ async function sendJuliusMessage() {
     return;
   }
 
-  const key = db.settings.groq_api_key;
+  const key = db.settings.anthropic_api_key;
   try {
     let userTextFinal = text;
 
@@ -8406,7 +8372,7 @@ async function sendJuliusMessage() {
     _saveJuliusHistory();
 
     // PASSO 2: chama o chat normal com o contexto completo (sem imagem)
-    const raw = await _callGroq(key, juliusHistory);
+    const raw = await _callAnthropicChat(key, juliusHistory);
     console.log('[Julius] Raw response:', raw.substring(0, 500));
     _juliusTypingStop();
     const { message, actions } = _parseJuliusResponse(raw);
@@ -8600,65 +8566,54 @@ Para add_cliente: tipo_cobranca = "mensal" ou "freelance". Se mensal, informe di
 Para marcar_custo_pago: custo_id é o id do custo da lista CUSTOS MENSAIS FIXOS acima.`;
 }
 
-// ── Passo 1: analisa só a imagem (payload pequeno, sem system prompt) ──
-// Modelos de visão em ordem de preferência — tenta o próximo se o atual falhar
-const _VISION_MODELS = [
-  'meta-llama/llama-4-scout-17b-16e-instruct',
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
-  'llama-3.2-90b-vision-preview'
-];
+// ── Julius (Anthropic) — dois níveis de modelo: Haiku pro dia a dia (chat, comprovante),
+// Sonnet pra tarefa pesada (extrato inteiro em PDF/texto, ver _EXTRATO_PDF_MODEL mais abaixo). ──
+const _JULIUS_CHAT_MODEL = 'claude-haiku-4-5';
 
+// ── Passo 1: analisa só a imagem (payload pequeno, sem system prompt) — Haiku dá conta bem, é tarefa simples ──
 async function _analyzeReceiptImage(apiKey, imageDataUrl) {
-  const kbSize = Math.round(imageDataUrl.length * 0.75 / 1024);
-  console.log(`[Julius] Imagem: ~${kbSize}KB`);
+  const match = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  if (!match) throw new Error('Formato de imagem inválido.');
+  const [, mediaType, base64Data] = match;
+  console.log(`[Julius] Imagem: ~${Math.round(base64Data.length * 0.75 / 1024)}KB`);
 
-  for (const model of _VISION_MODELS) {
-    try {
-      const result = await _tryVisionModel(apiKey, model, imageDataUrl);
-      console.log(`[Julius] Vision OK com modelo: ${model}`);
-      return result;
-    } catch(e) {
-      console.warn(`[Julius] Vision falhou (${model}):`, e.message);
-      // Se for erro de modelo indisponível, tenta o próximo
-      if (e.message.includes('model') || e.message.includes('404') || e.message.includes('deactivated') || e.message.includes('not found')) continue;
-      // Outros erros (auth, rede) — não adianta tentar outro modelo
-      throw e;
-    }
-  }
-  throw new Error('Nenhum modelo de visão disponível. Descreva o comprovante no texto.');
-}
+  const body = JSON.stringify({
+    model: _JULIUS_CHAT_MODEL,
+    max_tokens: 400,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+        { type: 'text', text: 'Analise este extrato ou comprovante. Extraia em português: valores, datas, estabelecimentos, método de pagamento (Pix, débito, crédito, dinheiro) e banco. Seja breve e direto.' }
+      ]
+    }]
+  });
 
-function _tryVisionModel(apiKey, model, imageDataUrl) {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      model,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: imageDataUrl } },
-          { type: 'text', text: 'Analise este extrato ou comprovante. Extraia em português: valores, datas, estabelecimentos, método de pagamento (Pix, débito, crédito, dinheiro) e banco. Seja breve e direto.' }
-        ]
-      }],
-      temperature: 0.1,
-      max_tokens: 400
-    });
-
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://api.groq.com/openai/v1/chat/completions', true);
-    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    xhr.open('POST', 'https://api.anthropic.com/v1/messages', true);
+    xhr.setRequestHeader('x-api-key', apiKey);
+    xhr.setRequestHeader('anthropic-version', '2023-06-01');
+    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access', 'true');
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.timeout = 45000;
 
     xhr.onload = () => {
       const raw = xhr.responseText || '';
-      console.log(`[Julius] Vision ${model} status: ${xhr.status}`);
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (raw.trimStart().startsWith('<')) { reject(new Error('HTML response')); return; }
-        try { resolve(JSON.parse(raw).choices[0].message.content); }
-        catch(e) { reject(new Error('Resposta inválida')); }
+        try {
+          const data = JSON.parse(raw);
+          const textBlock = (data.content || []).find(b => b.type === 'text');
+          if (!textBlock) throw new Error('Resposta sem texto');
+          resolve(textBlock.text);
+        } catch(e) { reject(new Error(e.message || 'Resposta inválida')); }
       } else {
         let msg = `HTTP ${xhr.status}`;
-        try { msg = JSON.parse(raw)?.error?.message || msg; } catch(e) {}
+        try {
+          const errData = JSON.parse(raw);
+          msg = errData?.error?.message || msg;
+          if (xhr.status === 401) msg = 'Chave Anthropic inválida. Verifique em Configurações.';
+        } catch(e) {}
         reject(new Error(msg));
       }
     };
@@ -8668,7 +8623,7 @@ function _tryVisionModel(apiKey, model, imageDataUrl) {
   });
 }
 
-// ── Extrato bancário em PDF — via Anthropic (Groq não lê PDF) ────
+// ── Extrato bancário em PDF/texto — tarefa pesada, usa Sonnet (não Haiku) ────
 // Sonnet 5 (~60% mais barato que Opus 5) — extração de tabela não exige o modelo mais caro.
 // Troque pra 'claude-opus-5' aqui se algum extrato começar a vir com erro de leitura.
 const _EXTRATO_PDF_MODEL = 'claude-sonnet-5';
@@ -8750,7 +8705,7 @@ async function _callAnthropicPDF(apiKey, base64Pdf, promptText, onProgress) {
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        // Chamada direta do navegador (app pessoal, sem backend) — igual já é feito com a chave Groq
+        // Chamada direta do navegador (app pessoal, sem backend)
         'anthropic-dangerous-direct-browser-access': 'true',
         'Content-Type': 'application/json'
       },
@@ -8980,37 +8935,37 @@ async function _processarExtratoPDF(userText, dataUrl) {
   if (juliusHistory.length > 60) juliusHistory = juliusHistory.slice(-50);
 }
 
-// ── Passo 2: chat normal — sem imagem, só texto ───────────────
-function _callGroq(apiKey, history) {
-  const messages = [
-    { role: 'system', content: _buildJuliusContext() },
-    ...history.slice(-12)
-  ];
+// ── Passo 2: chat normal — sem imagem, só texto — Haiku (rápido/barato, é o dia a dia) ──
+function _callAnthropicChat(apiKey, history) {
+  // Anthropic exige a 1ª mensagem com role 'user' — se uma chamada anterior falhou no meio
+  // (usuário empurrado no histórico sem resposta do assistant), o corte de -12 podia começar
+  // com 'assistant'. Descarta qualquer sobra do início até achar 'user'.
+  let messages = history.slice(-12);
+  while (messages.length && messages[0].role !== 'user') messages.shift();
 
   const body = JSON.stringify({
-    model: 'llama-3.3-70b-versatile',
-    messages,
-    temperature: 0.72,
-    max_tokens: 2000
+    model: _JULIUS_CHAT_MODEL,
+    max_tokens: 2000,
+    system: _buildJuliusContext(),
+    messages
   });
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://api.groq.com/openai/v1/chat/completions', true);
-    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+    xhr.open('POST', 'https://api.anthropic.com/v1/messages', true);
+    xhr.setRequestHeader('x-api-key', apiKey);
+    xhr.setRequestHeader('anthropic-version', '2023-06-01');
+    xhr.setRequestHeader('anthropic-dangerous-direct-browser-access', 'true');
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.timeout = 45000;
 
     xhr.onload = () => {
       const raw = xhr.responseText || '';
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (raw.trimStart().startsWith('<')) {
-          reject(new Error('Groq retornou HTML — chave inválida ou API fora do ar. Verifique em Configurações.'));
-          return;
-        }
         try {
           const data = JSON.parse(raw);
-          const content = data.choices?.[0]?.message?.content;
+          const textBlock = (data.content || []).find(b => b.type === 'text');
+          const content = textBlock?.text;
           if (!content) throw new Error('Resposta vazia da API. Tente novamente.');
           resolve(content);
         } catch(e) {
@@ -9021,7 +8976,7 @@ function _callGroq(apiKey, history) {
         try {
           const errData = JSON.parse(raw);
           msg = errData?.error?.message || msg;
-          if (xhr.status === 401) msg = 'Chave Groq inválida. Verifique em Configurações.';
+          if (xhr.status === 401) msg = 'Chave Anthropic inválida. Verifique em Configurações.';
           if (xhr.status === 429) msg = 'Limite de requisições atingido. Aguarde 1 minuto.';
         } catch(e) {}
         reject(new Error(msg));
@@ -9277,137 +9232,73 @@ function juliusRemoveAttachment() {
   if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
 }
 
-// ── Gravação de áudio com transcrição via Groq Whisper ───────
-async function juliusToggleMic() {
+// ── Ditado por voz — reconhecimento de voz nativo do navegador (grátis, sem chave nenhuma) ──
+// Antes gravava e mandava pra transcrição via Groq Whisper; sem Groq, essa API do próprio
+// navegador (Chrome/Edge/Safari) faz a mesma coisa sem custo e sem depender de servidor externo.
+function juliusToggleMic() {
   const btn = document.getElementById('julius-mic');
   if (!btn) return;
 
   if (juliusRecording) {
-    juliusMediaRecorder?.stop();
+    juliusRecognition?.stop();
     return;
   }
 
-  const key = db.settings.groq_api_key;
-  if (!key) {
-    _juliusAppend('julius', '⚙️ Configure a chave Groq em Configurações antes de usar o áudio.');
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    _juliusAppend('julius', '❌ Ditado por voz não suportado neste navegador. Tente Chrome, Edge ou Safari.');
     return;
   }
 
-  if (!navigator.mediaDevices?.getUserMedia) {
-    _juliusAppend('julius', '❌ Gravação de áudio não suportada neste navegador. Tente Chrome ou Safari.');
-    return;
-  }
+  juliusRecognition = new SpeechRecognition();
+  juliusRecognition.lang = 'pt-BR';
+  juliusRecognition.interimResults = false;
+  juliusRecognition.maxAlternatives = 1;
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    juliusAudioChunks = [];
-
-    // iOS Safari só suporta mp4 — testar na ordem certa
-    let mimeType = '';
-    const tipos = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
-    for (const t of tipos) {
-      if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; }
-    }
-
-    juliusMediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-
-    juliusMediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) juliusAudioChunks.push(e.data);
-    };
-
-    juliusMediaRecorder.onstop = async () => {
-      juliusRecording = false;
-      btn.classList.remove('recording');
-      btn.textContent = '🎤';
-      btn.title = 'Gravar áudio';
-      stream.getTracks().forEach(t => t.stop());
-
-      const actualMime = (juliusMediaRecorder.mimeType || mimeType || 'audio/webm').split(';')[0];
-      const blob = new Blob(juliusAudioChunks, { type: actualMime });
-
-      if (blob.size < 500) {
-        _juliusAppend('julius', '⚠️ Áudio muito curto. Segura o botão, fala e solta.');
-        return;
-      }
-
-      btn.textContent = '⏳';
-      btn.disabled = true;
-      _juliusAppend('julius', '🎧 Transcrevendo seu áudio...');
-      try {
-        const text = await _transcribeAudio(key, blob, actualMime);
-        // Remove mensagem "transcrevendo"
-        const msgs = document.getElementById('julius-messages');
-        if (msgs?.lastElementChild?.textContent?.includes('Transcrevendo')) {
-          msgs.lastElementChild.remove();
-        }
-        if (text?.trim()) {
-          const input = document.getElementById('julius-input');
-          if (input) {
-            input.value = text.trim();
-            input.style.height = 'auto';
-            input.style.height = Math.min(input.scrollHeight, 100) + 'px';
-          }
-          // Dispara envio automático
-          sendJuliusMessage();
-        } else {
-          _juliusAppend('julius', '⚠️ Não consegui entender o áudio. Fala mais perto do microfone e tente de novo.');
-        }
-      } catch(e) {
-        _juliusAppend('julius', `❌ Erro na transcrição: <em>${e.message}</em>`);
-      } finally {
-        btn.textContent = '🎤';
-        btn.disabled = false;
-      }
-    };
-
-    juliusMediaRecorder.start(100); // coleta chunks a cada 100ms
+  juliusRecognition.onstart = () => {
     juliusRecording = true;
     btn.classList.add('recording');
     btn.textContent = '⏹️';
     btn.title = 'Toque para parar';
+  };
 
-  } catch(e) {
-    if (e.name === 'NotAllowedError') {
-      _juliusAppend('julius', '🎤 Permissão de microfone negada. Autorize nas configurações do navegador.');
-    } else {
-      alert('Erro ao acessar microfone: ' + e.message);
-    }
-  }
-}
-
-function _transcribeAudio(apiKey, blob, mimeType) {
-  return new Promise((resolve, reject) => {
-    // Extensão baseada no tipo real do blob
-    const ext = mimeType?.includes('mp4') ? 'm4a'
-              : mimeType?.includes('ogg') ? 'ogg'
-              : 'webm';
-
-    const formData = new FormData();
-    formData.append('file', blob, `audio.${ext}`);
-    formData.append('model', 'whisper-large-v3-turbo');
-    formData.append('language', 'pt');
-    formData.append('response_format', 'text');
-
-    // XHR é mais estável que fetch para upload binário em Safari/WebKit mobile
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://api.groq.com/openai/v1/audio/transcriptions', true);
-    xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
-    xhr.timeout = 40000; // 40s — conexão 3G pode ser lenta
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.responseText || '');
-      } else {
-        let msg = `HTTP ${xhr.status}`;
-        try { msg = JSON.parse(xhr.responseText)?.error?.message || msg; } catch(e) {}
-        reject(new Error(msg));
+  juliusRecognition.onresult = (event) => {
+    const text = event.results?.[0]?.[0]?.transcript || '';
+    if (text.trim()) {
+      const input = document.getElementById('julius-input');
+      if (input) {
+        input.value = text.trim();
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 100) + 'px';
       }
-    };
-    xhr.onerror   = () => reject(new Error('Falha de rede. Verifique sua conexão.'));
-    xhr.ontimeout = () => reject(new Error('Tempo esgotado. Grave um áudio mais curto ou use Wi-Fi.'));
+      sendJuliusMessage();
+    } else {
+      _juliusAppend('julius', '⚠️ Não consegui entender o áudio. Fala mais perto do microfone e tente de novo.');
+    }
+  };
 
-    xhr.send(formData);
-  });
+  juliusRecognition.onerror = (event) => {
+    if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+      _juliusAppend('julius', '🎤 Permissão de microfone negada. Autorize nas configurações do navegador.');
+    } else if (event.error === 'no-speech') {
+      _juliusAppend('julius', '⚠️ Não ouvi nada. Segura o botão, fala e solta.');
+    } else if (event.error !== 'aborted') {
+      _juliusAppend('julius', `❌ Erro no ditado por voz: <em>${event.error}</em>`);
+    }
+  };
+
+  juliusRecognition.onend = () => {
+    juliusRecording = false;
+    btn.classList.remove('recording');
+    btn.textContent = '🎤';
+    btn.title = 'Gravar áudio';
+  };
+
+  try {
+    juliusRecognition.start();
+  } catch(e) {
+    _juliusAppend('julius', `❌ Erro ao iniciar o microfone: <em>${e.message}</em>`);
+  }
 }
 
 // ── Share Target: arquivo enviado via "Compartilhar" do celular ──
@@ -9438,55 +9329,6 @@ async function _checkPendingShare() {
       juliusHandleSharedFile(data.dataUrl, data.name);
     }
   } catch(e) {}
-}
-
-async function saveGroqKey() {
-  const key = document.getElementById('groqApiKey')?.value.trim();
-  if (!key) { alert('Cole sua chave API do Groq antes de salvar.'); return; }
-  if (!key.startsWith('gsk_')) {
-    alert('Chave inválida. A chave Groq começa com "gsk_". Copie direto do console.groq.com.');
-    return;
-  }
-  const status = document.getElementById('groqKeyStatus');
-  if (status) status.innerHTML = '<span style="color:var(--text3)">⏳ Salvando...</span>';
-  try {
-    db.settings.groq_api_key = key;
-    // Salva imediatamente no documento dedicado (sem debounce, nunca sobrescrito)
-    await _saveGroqKeyToCloud(key);
-    // Também atualiza o documento principal para compatibilidade
-    await writeToCloud();
-    if (status) status.innerHTML = '<span style="color:var(--green)">✅ Salva na sua conta — vale em todos os dispositivos!</span>';
-    setTimeout(() => testGroqKey(), 500);
-  } catch(e) {
-    if (status) status.innerHTML = `<span style="color:var(--red)">❌ Erro ao salvar: ${e.message}</span>`;
-  }
-}
-
-async function testGroqKey() {
-  const status = document.getElementById('groqKeyStatus');
-  const key = db.settings.groq_api_key;
-  if (!key) {
-    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Nenhuma chave salva</span>';
-    return;
-  }
-  if (status) status.innerHTML = '<span style="color:var(--text3)">🔄 Testando...</span>';
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: { 'Authorization': `Bearer ${key}` }
-    });
-    if (res.ok) {
-      if (status) status.innerHTML = '<span style="color:var(--green)">✅ Chave válida — Julius pronto!</span>';
-    } else {
-      const err = await res.json().catch(() => ({}));
-      const msg = err?.error?.message || `Erro ${res.status}`;
-      if (status) status.innerHTML = `<span style="color:var(--red)">❌ ${msg}</span>`;
-      if (res.status === 401) {
-        if (status) status.innerHTML = '<span style="color:var(--red)">❌ Chave inválida — gere uma nova em console.groq.com</span>';
-      }
-    }
-  } catch(e) {
-    if (status) status.innerHTML = '<span style="color:var(--orange)">⚠️ Sem conexão para testar</span>';
-  }
 }
 
 async function saveAnthropicKey() {
