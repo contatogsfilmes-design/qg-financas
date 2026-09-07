@@ -18,6 +18,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<!-- Google Identity Services — usada só pra conectar o Google Agenda (conta separada do login do app) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 *, *::before, *::after { touch-action: manipulation; }
 
@@ -990,7 +992,9 @@ let db = {
     tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
     tags_clientes: ['GS FILMES','Biel do QG'],
     bancos: ['Banco Inter','Nubank','Santander'],
-    anthropic_api_key: ''
+    anthropic_api_key: '',
+    google_calendar_connected: false,
+    google_calendar_email: ''
   },
   gastos: [],
   custos_mensais: [],
@@ -1046,7 +1050,9 @@ function getDefaultDB() {
       tags_investimentos: ['Para trabalho','Para lazer','Para carro','Para casa'],
       tags_clientes: ['GS FILMES','Biel do QG'],
       bancos: [],
-      anthropic_api_key: ''
+      anthropic_api_key: '',
+      google_calendar_connected: false,
+      google_calendar_email: ''
     },
     gastos: [], custos_mensais: [], investimentos: [], pendencias: [],
     bancos_saldo: [], cartao_compras: [], clientes: [], recebimentos: [], feedbacks: [],
@@ -1109,6 +1115,113 @@ async function loginGoogle() {
   } catch(e) {
     showLoginError(translateAuthError(e.code));
   }
+}
+
+// ============================================================
+// GOOGLE AGENDA — conexão via Google Identity Services (GIS), TOTALMENTE
+// separada do login do app (loginGoogle acima). O login do app usa Firebase Auth;
+// isso aqui usa OAuth puro pra pedir permissão de Calendar numa conta à parte —
+// prompt:'select_account' força a tela de escolher conta toda vez, então dá pra
+// conectar uma conta diferente (ex: Google Workspace da empresa) da que você usa
+// pra entrar no QG Finanças.
+//
+// CONFIGURAÇÃO NECESSÁRIA (uma vez só, no Google Cloud Console):
+// 1. console.cloud.google.com → selecionar o projeto "qgfinancas42" (mesmo do Firebase)
+// 2. APIs e Serviços → Biblioteca → "Google Calendar API" → Ativar
+// 3. APIs e Serviços → Tela de consentimento OAuth → tipo Externo → nome "QG Finanças"
+//    → escopos: calendar.events, email, profile → manter em modo TESTE e adicionar
+//    seu(s) e-mail(s) em "usuários de teste" (evita precisar de verificação do Google —
+//    vai aparecer aviso "app não verificado" ao logar, é só clicar Avançado → Acessar)
+// 4. APIs e Serviços → Credenciais → Criar Credenciais → ID do cliente OAuth →
+//    "Aplicativo da Web" → em Origens JavaScript autorizadas, adicionar a URL do
+//    GitHub Pages (ex: https://SEU-USUARIO.github.io)
+// 5. Colar o Client ID gerado na constante abaixo
+const GOOGLE_CALENDAR_CLIENT_ID = 'COLE_AQUI_SEU_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events email profile';
+
+let _gcalTokenClient = null;
+let _gcalAccessToken = null;
+
+function _gcalEnsureTokenClient() {
+  if (_gcalTokenClient) return _gcalTokenClient;
+  if (!window.google?.accounts?.oauth2) return null;
+  _gcalTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CALENDAR_CLIENT_ID,
+    scope: GOOGLE_CALENDAR_SCOPE,
+    callback: '' // definido dinamicamente a cada chamada (connect/refresh)
+  });
+  return _gcalTokenClient;
+}
+
+function conectarGoogleAgenda() {
+  if (GOOGLE_CALENDAR_CLIENT_ID.includes('COLE_AQUI')) {
+    alert('Integração com Google Agenda ainda não configurada — falta o Client ID no código. Veja o passo-a-passo comentado no código-fonte (função conectarGoogleAgenda).');
+    return;
+  }
+  const client = _gcalEnsureTokenClient();
+  if (!client) { alert('Biblioteca do Google ainda carregando — espera uns segundos e tenta de novo.'); return; }
+
+  client.callback = async (resp) => {
+    if (resp.error) {
+      if (resp.error !== 'popup_closed_by_user' && resp.error !== 'access_denied') {
+        alert('Erro ao conectar com o Google: ' + resp.error);
+      }
+      return;
+    }
+    _gcalAccessToken = resp.access_token;
+    localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expiry: Date.now() + (resp.expires_in * 1000) }));
+
+    // Busca o e-mail da conta conectada só pra mostrar na UI qual conta é
+    let email = '';
+    try {
+      const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${resp.access_token}` } });
+      email = (await res.json())?.email || '';
+    } catch(e) {}
+
+    db.settings.google_calendar_connected = true;
+    db.settings.google_calendar_email = email;
+    saveData();
+    if (currentPage === 'configuracoes') renderSettings();
+  };
+
+  // select_account: sempre mostra o seletor de conta do Google, independente de qual
+  // conta já está logada no app ou no navegador — é isso que permite escolher uma conta diferente
+  client.requestAccessToken({ prompt: 'select_account' });
+}
+
+function desconectarGoogleAgenda() {
+  if (_gcalAccessToken && window.google?.accounts?.oauth2) {
+    google.accounts.oauth2.revoke(_gcalAccessToken, () => {});
+  }
+  _gcalAccessToken = null;
+  localStorage.removeItem('gcal_token');
+  db.settings.google_calendar_connected = false;
+  db.settings.google_calendar_email = '';
+  saveData();
+  if (currentPage === 'configuracoes') renderSettings();
+}
+
+// Retorna um access token válido pra chamar a Calendar API, renovando em silêncio (sem
+// popup) se o de cache expirou — só funciona se o usuário já tinha autorizado antes e
+// continua logado naquela conta Google no navegador. Se falhar, retorna null (chamador
+// deve pedir pra reconectar via conectarGoogleAgenda()).
+async function _gcalGetValidToken() {
+  const cached = JSON.parse(localStorage.getItem('gcal_token') || 'null');
+  if (cached && cached.expiry > Date.now() + 60000) {
+    _gcalAccessToken = cached.token;
+    return _gcalAccessToken;
+  }
+  const client = _gcalEnsureTokenClient();
+  if (!client) return null;
+  return new Promise((resolve) => {
+    client.callback = (resp) => {
+      if (resp.error) { resolve(null); return; }
+      _gcalAccessToken = resp.access_token;
+      localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expiry: Date.now() + (resp.expires_in * 1000) }));
+      resolve(resp.access_token);
+    };
+    client.requestAccessToken({ prompt: '' }); // silencioso — sem tela, só renova o token
+  });
 }
 
 async function loginEmail() {
@@ -7295,6 +7408,22 @@ function renderSettings() {
                 : '<span style="color:var(--text3)">⚠️ Chave não configurada — sem ela o Julius não funciona</span>'}
             </span>
           </div>
+        </div>
+
+        <!-- GOOGLE AGENDA -->
+        <div class="card">
+          <div class="card-title">🗓️ INTEGRAÇÃO — GOOGLE AGENDA</div>
+          <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px">
+            Conecta uma conta do Google pra colocar compromissos financeiros direto na agenda (vencimento de conta, data de pagamento, etc — isso vem numa próxima atualização). <strong style="color:var(--green)">Pode ser uma conta diferente</strong> da que você usa pra logar no QG Finanças — ao conectar, o Google sempre pergunta qual conta usar.
+          </div>
+          ${db.settings.google_calendar_connected ? `
+            <div class="setting-row" style="border:none">
+              <div><div class="setting-name">✅ Conectado</div><div class="setting-desc">${db.settings.google_calendar_email || 'Conta conectada'}</div></div>
+              <button class="btn btn-danger btn-sm" onclick="desconectarGoogleAgenda()">Desconectar</button>
+            </div>
+          ` : `
+            <button class="btn btn-primary btn-sm" onclick="conectarGoogleAgenda()">🗓️ Conectar Google Agenda</button>
+          `}
         </div>
 
         <!-- SOBRE -->
