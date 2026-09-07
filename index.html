@@ -1224,6 +1224,87 @@ async function _gcalGetValidToken() {
   });
 }
 
+// Converte um "dia de vencimento" (1-31) na próxima data (YYYY-MM-DD) em que ele cai —
+// hoje mesmo se ainda não passou, senão no mês seguinte. Fica em componentes locais
+// (nunca passa por toISOString) pra não sofrer o desvio de fuso horário do Brasil (UTC-3),
+// que joga a data um dia pra trás se convertida direto pra UTC.
+function _gcalDiaVencToISO(dia) {
+  const hoje = new Date();
+  let ano = hoje.getFullYear(), mes = hoje.getMonth();
+  if (dia < hoje.getDate()) mes += 1;
+  const d = new Date(ano, mes, dia);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function _addDiasISO(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  const pad = x => String(x).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+// Cria (ou remove) o evento recorrente mensal desse custo fixo na Google Agenda conectada.
+// Guarda o id do evento em c.google_event_id pra saber que já está sincronizado e pra
+// poder apagar o evento certo depois, sem duplicar a cada clique.
+async function _gcalSincronizarCusto(id) {
+  const c = db.custos_mensais.find(x => x.id === id);
+  if (!c) return;
+
+  if (c.google_event_id) {
+    const token = await _gcalGetValidToken();
+    if (token) {
+      try {
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${c.google_event_id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } catch (e) {}
+    }
+    delete c.google_event_id;
+    saveData();
+    openAddCusto(id);
+    return;
+  }
+
+  if (!db.settings.google_calendar_connected) {
+    alert('Conecte sua conta do Google Agenda em Configurações antes de adicionar custos fixos à agenda.');
+    return;
+  }
+  if (!c.dia_vencimento) {
+    alert('Defina o "Dia Vencimento" antes de adicionar este custo à agenda.');
+    return;
+  }
+
+  const token = await _gcalGetValidToken();
+  if (!token) { alert('Não foi possível acessar sua Google Agenda — reconecte em Configurações.'); return; }
+
+  const inicio = _gcalDiaVencToISO(parseInt(c.dia_vencimento, 10));
+  const fim = _addDiasISO(inicio, 1); // all-day: end é exclusivo, precisa ser o dia seguinte
+
+  try {
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: `💰 ${c.nome} — R$ ${fmtMoney(c.valor)}`,
+        description: 'Custo fixo mensal — QG Finanças',
+        start: { date: inicio },
+        end: { date: fim },
+        recurrence: ['RRULE:FREQ=MONTHLY']
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert('Erro ao criar evento na agenda: ' + (data.error?.message || res.status)); return; }
+    c.google_event_id = data.id;
+    saveData();
+    openAddCusto(id);
+  } catch (e) {
+    alert('Erro ao criar evento na agenda: ' + e.message);
+  }
+}
+
 async function loginEmail() {
   hideLoginError();
   const email = document.getElementById('loginEmail').value.trim();
@@ -4761,6 +4842,15 @@ function openAddCusto(id) {
         ${perfis.map(p => `<option value="${p}" ${perfilAtual===p?'selected':''}>${p === perfis[0] ? '👤 '+p+' (minha conta)' : '👥 '+p+' (só anotação)'}</option>`).join('')}
       </select>
     </div>
+    ${c ? `
+    <div class="form-group">
+      <label class="form-label">Google Agenda</label>
+      ${db.settings.google_calendar_connected
+        ? (c.google_event_id
+            ? `<button type="button" class="btn btn-outline" style="width:100%;color:var(--green);border-color:var(--green)" onclick="_gcalSincronizarCusto('${c.id}')">✅ Na Agenda — clique pra remover</button>`
+            : `<button type="button" class="btn btn-outline" style="width:100%" onclick="_gcalSincronizarCusto('${c.id}')">📅 Adicionar à Agenda${c.dia_vencimento ? ' (todo dia ' + c.dia_vencimento + ')' : ''}</button>`)
+        : `<div style="font-size:0.7rem;color:var(--text3)">Conecte sua conta em Configurações para adicionar este custo à agenda.</div>`}
+    </div>` : ''}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveCusto('${id || ''}')">Salvar</button>
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
