@@ -8613,8 +8613,9 @@ function _tryVisionModel(apiKey, model, imageDataUrl) {
 }
 
 // ── Extrato bancário em PDF — via Anthropic (Groq não lê PDF) ────
-// Modelo fixo em Opus (melhor precisão pra extração financeira). Troque aqui se quiser outro.
-const _EXTRATO_PDF_MODEL = 'claude-opus-5';
+// Sonnet 5 (~60% mais barato que Opus 5) — extração de tabela não exige o modelo mais caro.
+// Troque pra 'claude-opus-5' aqui se algum extrato começar a vir com erro de leitura.
+const _EXTRATO_PDF_MODEL = 'claude-sonnet-5';
 
 function _buildExtratoPrompt(userText, bancosList) {
   const bancosJSON = JSON.stringify(
@@ -8659,7 +8660,7 @@ async function _callAnthropicPDF(apiKey, base64Pdf, promptText, onProgress) {
     model: _EXTRATO_PDF_MODEL,
     max_tokens: 24000, // extrato real pode ter 200+ transações — JSON de saída fica grande
     stream: true,
-    output_config: { effort: 'high' },
+    output_config: { effort: 'medium' }, // extração de tabela não precisa de "high" — corta bastante token de raciocínio
     messages: [{
       role: 'user',
       content: [
