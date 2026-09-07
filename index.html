@@ -2464,6 +2464,7 @@ function _renderMovsTimeline(movs, showSaldo, openingBalance) {
       const sinal      = isEntrada ? '+' : isEmp ? '±' : '−';
       const banco      = _getBancoIcon(m);
       const tag        = isEntrada ? (m.categoria || '') : (m.tag || '');
+      const clienteNome= (isEntrada && m.cliente_id) ? db.clientes.find(c=>c.id===m.cliente_id)?.nome : null;
       const hora       = m.hora ? m.hora : '';
       const saldoHtml  = (showSaldo && m._saldo_depois != null) ? `<div class="extrato-saldo-running">Saldo após: <span class="extrato-saldo-val">R$ ${fmtMoney(m._saldo_depois)}</span></div>` : '';
 
@@ -2488,6 +2489,7 @@ function _renderMovsTimeline(movs, showSaldo, openingBalance) {
               ${hora ? `<span style="font-size:0.68rem;color:var(--text3)">🕐 ${hora}</span>` : ''}
               ${banco}
               ${tag ? `<span class="extrato-badge">${tag}</span>` : ''}
+              ${clienteNome ? `<span class="extrato-badge" style="color:var(--green);border-color:var(--green)">👤 ${clienteNome}</span>` : ''}
             </div>
             ${saldoHtml}
           </div>
@@ -2981,6 +2983,12 @@ function editExtratoItem(tipo, id) {
       </div>
       <div class="form-group"><label class="form-label">Descrição</label><input type="text" class="form-control" id="eeDesc" value="${e.descricao||''}"></div>
       <div class="form-group"><label class="form-label">Categoria</label><input type="text" class="form-control" id="eeCat" value="${e.categoria||''}"></div>
+      <div class="form-group"><label class="form-label">Cliente (opcional — vincula esse recebimento a um cliente)</label>
+        <select class="form-control" id="eeCliente">
+          <option value="">— Nenhum —</option>
+          ${db.clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c=>`<option value="${c.id}" ${e.cliente_id===c.id?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </div>
       <div class="form-group"><label class="form-label">Observação</label><input type="text" class="form-control" id="eeObs" value="${e.obs||''}"></div>
       <div style="display:flex;gap:8px;margin-top:16px">
         <button class="btn btn-primary" onclick="_saveEditEntrada('${id}')">Salvar</button>
@@ -3044,6 +3052,7 @@ function _saveEditEntrada(id) {
     nome_banco:newBanco?.nome||'Dinheiro em mão',
     descricao: document.getElementById('eeDesc').value.trim(),
     categoria: document.getElementById('eeCat').value.trim(),
+    cliente_id:document.getElementById('eeCliente')?.value || null,
     obs:       document.getElementById('eeObs').value.trim()
   });
   closeModal(); saveData();
@@ -5829,7 +5838,8 @@ function renderClientesMensaisPorMes(mesBase) {
                   </span>
                   <span style="font-family:var(--font-head);font-size:0.9rem;color:${pago?'var(--text3)':'var(--green)'}">R$ ${fmtMoney(valMensal)}</span>
                   ${!pago
-                    ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">✅ Receber</button>`
+                    ? `<button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')">✅ Receber</button>
+                       <button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.68rem;border-color:var(--blue);color:var(--blue)" onclick="marcarRecebidoSemConta('${c.id}','${mesBase}')" title="Marca como recebido sem mexer em conta bancária">📝 Marcar Recebido</button>`
                     : `<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem;opacity:0.6" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️</button>`}
                 </div>
                 <!-- Extras -->
@@ -5865,7 +5875,8 @@ function renderClientesMensaisPorMes(mesBase) {
               ${totalExtras === 0 ? (!pago
                 ? `<button class="btn btn-primary btn-sm" onclick="confirmarPagamentoMes('${c.id}','${mesBase}')" style="${parcial?'background:var(--blue);border-color:var(--blue)':''}">
                     ${parcial ? `⚡ Receber R$ ${fmtMoney(Math.max(0,valorLiq-recMes))}` : future ? '✅ Receber' : '✅ Confirmar'}
-                  </button>`
+                  </button>
+                  <button class="btn btn-outline btn-sm" style="border-color:var(--blue);color:var(--blue)" onclick="marcarRecebidoSemConta('${c.id}','${mesBase}')" title="Marca como recebido sem mexer em conta bancária">📝 Marcar Recebido</button>`
                 : `<button class="btn btn-outline btn-sm" onclick="desfazerPagamentoMes('${c.id}','${mesBase}')">↩️ Desfazer</button>`)
                 : ''}
               <button class="btn btn-outline btn-sm" onclick="addExtraMensal('${c.id}')">+ Extra</button>
@@ -5956,6 +5967,63 @@ function _confirmarPagamentoMes(clienteId, mesBase) {
     descricao: `Recebimento ${c.nome} — ${_nomeMes(mesRef)}`,
     categoria: c.categoria||'Recebimento', forma: forma||'pix', bancoId, obs
   });
+
+  closeModal(); saveData();
+  renderClientesMensaisPorMes(mesBase);
+}
+
+// ── Marcar como Recebido SEM mexer em conta — só pra status/"a receber", não lança no
+// extrato nem no saldo. Quando o valor aparecer de verdade no extrato (manual ou PDF), o
+// Biel edita aquele lançamento (✏️) e vincula ao cliente lá — ver campo "Cliente" em editExtratoItem.
+function marcarRecebidoSemConta(clienteId, mesRef) {
+  const c = db.clientes.find(x=>x.id===clienteId);
+  if (!c) return;
+  const valesP        = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+  const valorLiq       = Math.max(0, parseFloat(c.valor_mensal||0) - valesP);
+  const recebidoNoMes  = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesRef).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+  const valorRestante  = Math.max(0, valorLiq - recebidoNoMes);
+
+  openModal(`📝 MARCAR COMO RECEBIDO — ${c.nome} (${_nomeMes(mesRef)})`, `
+    <div style="background:rgba(64,196,255,0.08);border:1px solid var(--blue);border-radius:var(--radius2);padding:10px 12px;font-size:0.78rem;color:var(--text2);margin-bottom:14px">
+      💡 Isso só marca que você já recebeu, pra tirar da lista de pendências. <strong>Não</strong> mexe em saldo de conta nem cria lançamento no extrato. Quando o valor aparecer no extrato de verdade, edita o lançamento lá (✏️) e vincula a esse cliente.
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Data do Recebimento</label>
+        <input type="date" class="form-control" id="mrscData" value="${today()}">
+      </div>
+      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label>
+        <input type="text" inputmode="decimal" class="form-control" id="mrscValor" value="${fmtValorMask(valorRestante.toFixed(2))}" oninput="formatarValorInput(this)">
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Observação</label>
+      <input type="text" class="form-control" id="mrscObs" placeholder="Ex: cliente confirmou, ainda não caiu na conta">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-primary" onclick="_marcarRecebidoSemConta('${clienteId}','${mesRef}')">📝 Marcar como Recebido</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+}
+
+function _marcarRecebidoSemConta(clienteId, mesBase) {
+  const c     = db.clientes.find(x=>x.id===clienteId);
+  if (!c) return;
+  const valor = valorNum('mrscValor');
+  const data  = document.getElementById('mrscData').value;
+  const obs   = document.getElementById('mrscObs')?.value.trim()||'';
+  if (!valor) return alert('Informe o valor recebido.');
+
+  // Quitar vales só se pagando o valor líquido completo (não em pagamento parcial)
+  const _valesP = (c.vales||[]).filter(v=>!v.quitado).reduce((a,v)=>a+parseFloat(v.valor||0),0);
+  const _valorLiq = Math.max(0, parseFloat(c.valor_mensal||0) - _valesP);
+  const _recebidoAnte = (c.pagamentos||[]).filter(p=>(p.mes_referencia||'').substring(0,7)===mesBase).reduce((a,p)=>a+parseFloat(p.valor||0),0);
+  if (valor + _recebidoAnte >= _valorLiq - 0.01) {
+    (c.vales||[]).filter(v=>!v.quitado).forEach(v=>{v.quitado=true;v.data_quitado=data;});
+  }
+
+  // Registra o pagamento pro status/projeção — sem entrada_conta, sem _persistEntrada (de propósito)
+  c.pagamentos = c.pagamentos || [];
+  c.pagamentos.push({ id:uid(), data, valor, obs, mes_referencia:mesBase, sem_conta: true });
 
   closeModal(); saveData();
   renderClientesMensaisPorMes(mesBase);
