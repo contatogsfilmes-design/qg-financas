@@ -2548,6 +2548,7 @@ function abrirExtratoBanco(bancoId) {
       <button class="btn btn-sm" style="background:var(--green);color:#0f1117;border:none;flex:1" onclick="closeModal();quickLancarEntrada('${bancoId}')">💵 + Entrada</button>
       <button class="btn btn-sm btn-outline" style="flex:1" onclick="ajustarSaldoBanco('${bancoId}')">⚖️ Ajustar Saldo</button>
       <button class="btn btn-sm btn-outline" style="flex:1;border-color:var(--blue);color:var(--blue)" onclick="triggerAtualizarExtratoBanco('${bancoId}')">📄 Atualizar Extrato (PDF)</button>
+      <button class="btn btn-sm btn-outline" style="flex:1;border-color:var(--blue);color:var(--blue)" onclick="triggerColarExtratoTexto('${bancoId}')">📝 Colar Texto do Extrato</button>
     </div>
     ${b.saldo < 0 ? `<div style="background:rgba(255,82,82,0.08);border:1px solid rgba(255,82,82,0.3);border-radius:var(--radius2);padding:8px 12px;font-size:0.78rem;color:var(--red);margin-bottom:12px">⚠️ Saldo negativo — use <strong>Ajustar Saldo</strong> para corrigir o saldo de abertura se ele não reflete a realidade.</div>` : ''}
     <div style="max-height:380px;overflow-y:auto">
@@ -2583,6 +2584,7 @@ function _abrirExtratoCartaoCredito(cartaoId) {
       <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none;flex:1" onclick="closeModal();openLancarCompraCredito('${cartaoId}')">🛒 + Compra</button>
       <button class="btn btn-sm btn-outline" style="flex:1" onclick="closeModal();pagarFatura('${cartaoId}')">💳 Pagar Fatura</button>
       <button class="btn btn-sm btn-outline" style="flex:1;border-color:var(--blue);color:var(--blue)" onclick="triggerAtualizarExtratoBanco('${cartaoId}')">📄 Atualizar Extrato (PDF)</button>
+      <button class="btn btn-sm btn-outline" style="flex:1;border-color:var(--blue);color:var(--blue)" onclick="triggerColarExtratoTexto('${cartaoId}')">📝 Colar Texto do Extrato</button>
     </div>
     <div style="max-height:380px;overflow-y:auto">
       ${compras.length===0
@@ -2605,15 +2607,15 @@ function _abrirExtratoCartaoCredito(cartaoId) {
   `, true);
 }
 
-// ─── Atualizar Extrato via PDF — botão dentro do modal de extrato do banco ───
-// Usa a Anthropic (Claude lê PDF nativo) pra extrair as transações e concilia
-// com o que já está lançado nesse banco (não duplica). Compartilha a lógica
-// com o Julius no chat via _conciliarEImportarExtrato / _buildExtratoPromptBancoConhecido.
+// ─── Atualizar Extrato (PDF ou texto colado) — botões dentro do modal de extrato do banco ───
+// Usa a Anthropic (Claude lê PDF nativo, ou lê texto puro mais barato) pra extrair as transações
+// e concilia com o que já está lançado nesse banco (não duplica). Compartilha a lógica com o
+// Julius no chat via _conciliarEImportarExtrato / _buildExtratoPromptBancoConhecido.
 function triggerAtualizarExtratoBanco(bancoId) {
   const banco = db.bancos_saldo.find(b => b.id === bancoId);
   if (!banco) return;
   if (!db.settings.anthropic_api_key) {
-    alert('Configure a chave Anthropic em Configurações → IA Julius (Anthropic) antes de atualizar extrato por PDF.');
+    alert('Configure a chave Anthropic em Configurações → IA Julius (Anthropic) antes de atualizar extrato.');
     return;
   }
   const input = document.createElement('input');
@@ -2623,10 +2625,60 @@ function triggerAtualizarExtratoBanco(bancoId) {
   input.click();
 }
 
+function triggerColarExtratoTexto(bancoId) {
+  const banco = db.bancos_saldo.find(b => b.id === bancoId);
+  if (!banco) return;
+  if (!db.settings.anthropic_api_key) {
+    alert('Configure a chave Anthropic em Configurações → IA Julius (Anthropic) antes de atualizar extrato.');
+    return;
+  }
+  openModal(`📝 Colar Extrato — ${banco.nome}`, `
+    <div style="font-size:0.8rem;color:var(--text2);margin-bottom:10px">Cola abaixo o texto do extrato (copiado do app ou site do banco). Funciona igual ao PDF — só que mais barato e mais rápido.</div>
+    <textarea id="extratoTextoColado" class="form-control" rows="14" style="width:100%;font-family:monospace;font-size:0.76rem;resize:vertical" placeholder="Cole aqui o texto do extrato..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" style="flex:1" onclick="_processarExtratoTextoColado('${bancoId}')">Processar Extrato</button>
+      <button class="btn btn-outline" onclick="_reabrirExtratoBanco('${bancoId}')">Cancelar</button>
+    </div>
+  `, true);
+}
+
 function _reabrirExtratoBanco(bancoId) {
   const banco = db.bancos_saldo.find(b => b.id === bancoId);
   if (!banco) return;
   banco.tipo === 'credito' ? _abrirExtratoCartaoCredito(bancoId) : abrirExtratoBanco(bancoId);
+}
+
+// Renderiza o resultado (achadas/novas/duplicadas) — usado tanto pelo fluxo de PDF quanto pelo de texto colado.
+function _mostrarResultadoExtratoImportado(banco, bancoId, parsed, transacoes, fonteLabel) {
+  if (!transacoes || transacoes.length === 0) {
+    openModal(`📄 Extrato — ${banco.nome}`, `
+      <div class="empty-state"><div class="empty-text">Não encontrei transações ${fonteLabel}. Confere se é mesmo um extrato com movimentações.</div></div>
+      <button class="btn btn-outline" style="width:100%;margin-top:12px" onclick="_reabrirExtratoBanco('${bancoId}')">Voltar</button>
+    `, true);
+    return;
+  }
+
+  const { novasGasto, novasEntrada, duplicadas, ignoradasFatura } = _conciliarEImportarExtrato(banco, transacoes);
+  const novasTotal = novasGasto + novasEntrada;
+
+  openModal(`✅ Extrato atualizado — ${banco.nome}`, `
+    <div style="text-align:center;padding:10px">
+      <div style="font-size:2rem;margin-bottom:8px">📄</div>
+      ${parsed.periodo ? `<div style="color:var(--text3);font-size:0.78rem;margin-bottom:10px">${parsed.periodo}</div>` : ''}
+      <div style="font-size:1rem;color:var(--text)">${transacoes.length} transações encontradas ${fonteLabel}</div>
+      <div style="margin-top:10px;color:var(--green);font-family:var(--font-head)">✅ ${novasTotal} nova${novasTotal===1?'':'s'} importada${novasTotal===1?'':'s'}</div>
+      ${duplicadas>0 ? `<div style="margin-top:4px;color:var(--text3);font-size:0.85rem">⏭️ ${duplicadas} já estava${duplicadas===1?'':'m'} lançada${duplicadas===1?'':'s'} (ignorei pra não duplicar)</div>` : ''}
+      ${ignoradasFatura>0 ? `<div style="margin-top:4px;color:var(--orange);font-size:0.85rem">💳 ${ignoradasFatura} linha${ignoradasFatura===1?'':'s'} de pagamento de fatura ignorada${ignoradasFatura===1?'':'s'} — use "Pagar Fatura"</div>` : ''}
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="_reabrirExtratoBanco('${bancoId}')">Ver extrato completo</button>
+  `, true);
+}
+
+function _mostrarErroExtrato(banco, bancoId, mensagem) {
+  openModal(`❌ Erro ao ler extrato — ${banco.nome}`, `
+    <div style="color:var(--red);margin-bottom:12px">${mensagem}</div>
+    <button class="btn btn-outline" style="width:100%" onclick="_reabrirExtratoBanco('${bancoId}')">Voltar</button>
+  `, true);
 }
 
 async function _onExtratoDashboardSelected(event, bancoId) {
@@ -2658,40 +2710,44 @@ async function _onExtratoDashboardSelected(event, bancoId) {
       });
       const parsed = _parseExtratoResponse(raw);
       const transacoes = Array.isArray(parsed.transacoes) ? parsed.transacoes : [];
-
-      if (transacoes.length === 0) {
-        openModal(`📄 Extrato — ${banco.nome}`, `
-          <div class="empty-state"><div class="empty-text">Não encontrei transações nesse PDF. Confere se é mesmo um extrato com movimentações.</div></div>
-          <button class="btn btn-outline" style="width:100%;margin-top:12px" onclick="_reabrirExtratoBanco('${bancoId}')">Voltar</button>
-        `, true);
-        return;
-      }
-
-      const { novasGasto, novasEntrada, duplicadas, ignoradasFatura } = _conciliarEImportarExtrato(banco, transacoes);
-      const novasTotal = novasGasto + novasEntrada;
-
-      openModal(`✅ Extrato atualizado — ${banco.nome}`, `
-        <div style="text-align:center;padding:10px">
-          <div style="font-size:2rem;margin-bottom:8px">📄</div>
-          ${parsed.periodo ? `<div style="color:var(--text3);font-size:0.78rem;margin-bottom:10px">${parsed.periodo}</div>` : ''}
-          <div style="font-size:1rem;color:var(--text)">${transacoes.length} transações encontradas no PDF</div>
-          <div style="margin-top:10px;color:var(--green);font-family:var(--font-head)">✅ ${novasTotal} nova${novasTotal===1?'':'s'} importada${novasTotal===1?'':'s'}</div>
-          ${duplicadas>0 ? `<div style="margin-top:4px;color:var(--text3);font-size:0.85rem">⏭️ ${duplicadas} já estava${duplicadas===1?'':'m'} lançada${duplicadas===1?'':'s'} (ignorei pra não duplicar)</div>` : ''}
-          ${ignoradasFatura>0 ? `<div style="margin-top:4px;color:var(--orange);font-size:0.85rem">💳 ${ignoradasFatura} linha${ignoradasFatura===1?'':'s'} de pagamento de fatura ignorada${ignoradasFatura===1?'':'s'} — use "Pagar Fatura"</div>` : ''}
-        </div>
-        <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="_reabrirExtratoBanco('${bancoId}')">Ver extrato completo</button>
-      `, true);
+      _mostrarResultadoExtratoImportado(banco, bancoId, parsed, transacoes, 'no PDF');
     } catch(err) {
-      openModal(`❌ Erro ao ler extrato — ${banco.nome}`, `
-        <div style="color:var(--red);margin-bottom:12px">${err.message}</div>
-        <button class="btn btn-outline" style="width:100%" onclick="_reabrirExtratoBanco('${bancoId}')">Voltar</button>
-      `, true);
+      _mostrarErroExtrato(banco, bancoId, err.message);
     }
   };
   reader.onerror = () => {
     openModal('❌ Erro', '<div style="color:var(--red)">Não consegui ler o arquivo. Tente de novo.</div>', true);
   };
   reader.readAsDataURL(file);
+}
+
+async function _processarExtratoTextoColado(bancoId) {
+  const banco = db.bancos_saldo.find(b => b.id === bancoId);
+  if (!banco) return;
+  const texto = document.getElementById('extratoTextoColado')?.value.trim();
+  if (!texto) { alert('Cola o texto do extrato antes de processar.'); return; }
+  if (texto.length < 30) { alert('Esse texto parece curto demais pra ser um extrato. Confere se colou certo.'); return; }
+
+  openModal(`📝 Processando extrato — ${banco.nome}`, `
+    <div style="text-align:center;padding:30px 10px">
+      <div style="font-size:2rem;margin-bottom:10px">⏳</div>
+      <div style="color:var(--text2)">Lendo o texto com o Claude e conciliando com o que já está lançado...</div>
+      <div id="extratoProgresso" style="font-size:0.72rem;color:var(--text3);margin-top:8px">Não feche essa tela</div>
+    </div>
+  `, true);
+
+  try {
+    const prompt = _buildExtratoPromptBancoConhecido(banco, texto);
+    const raw = await _callAnthropicPDF(db.settings.anthropic_api_key, null, prompt, (chars) => {
+      const el = document.getElementById('extratoProgresso');
+      if (el) el.textContent = `Recebendo resposta... (~${chars} caracteres lidos)`;
+    });
+    const parsed = _parseExtratoResponse(raw);
+    const transacoes = Array.isArray(parsed.transacoes) ? parsed.transacoes : [];
+    _mostrarResultadoExtratoImportado(banco, bancoId, parsed, transacoes, 'no texto');
+  } catch(err) {
+    _mostrarErroExtrato(banco, bancoId, err.message);
+  }
 }
 
 // ─── Marcar uma compra específica do cartão como paga ────────
@@ -8617,26 +8673,37 @@ function _tryVisionModel(apiKey, model, imageDataUrl) {
 // Troque pra 'claude-opus-5' aqui se algum extrato começar a vir com erro de leitura.
 const _EXTRATO_PDF_MODEL = 'claude-sonnet-5';
 
+// Regras comuns aos dois prompts (chat com banco a adivinhar / dashboard com banco já sabido).
+// Cobre padrões vistos em extratos reais (Inter e Santander) durante os testes: transações
+// repetidas de propósito, "Pix enviado devolvido"/estorno, data na própria linha divergindo do
+// cabeçalho do dia (comum em compra no débito que só aparece no extrato 1 dia depois), e texto
+// colado de app de celular quebrado em duas linhas ("continua na próxima tela").
+function _extratoRegrasComuns(numeroBancoId, isCredito) {
+  const tipoGasto = 'saída/débito/compra' + (isCredito === false ? '/pagamento de fatura de cartão de crédito feito por essa conta' : '');
+  const tipoEntrada = 'crédito/recebimento/depósito/"Pix enviado devolvido" ou estorno' + (isCredito === true ? '/pagamento da fatura recebido' : '');
+  return `1. Leia tudo, extraia CADA transação individual (não resuma, não pule nenhuma, não invente). Extratos reais têm muitas transações — às vezes 100, 200 ou mais. Se tiver 2 linhas com mesma data e mesmo valor, são DUAS transações reais e diferentes — inclua as duas, não deduplique.
+2. Para cada transação, classifique "tipo" como "gasto" (${tipoGasto}) ou "entrada" (${tipoEntrada}).
+3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal) — olhe o sinal (+/-, incluindo o caractere "−" que também é sinal de negativo) ou a cor/coluna pra saber se é entrada ou gasto, não adivinhe pela descrição.
+4. "data" no formato YYYY-MM-DD. Extratos costumam agrupar transações sob um cabeçalho de dia (ex: "Terça, 8 de setembro") — use esse dia como padrão, MAS se a própria linha da transação trouxer uma data explícita (ex: "Compra cartão déb MC — 07/09 ..."), use a data DA LINHA — é a data real da compra, que pode ser um dia antes do cabeçalho (comum em compra no débito que só aparece no extrato depois). Se não houver ano em lugar nenhum, assuma ${new Date().getFullYear()}.
+5. "descricao": texto curto baseado no extrato (nome de quem pagou/recebeu ou do estabelecimento — nomes cortados com "..." são normais, use como está). Se uma transação aparecer quebrada em duas linhas por causa de copiar/colar de app de celular (uma linha corta com algo como "(continua na próxima tela)" e o nome/valor real vem na linha seguinte), junte as duas como UMA transação só.
+${numeroBancoId}. Ignore linhas de "saldo do dia"/"saldo disponível", totalizadores, cabeçalho/rodapé, ou qualquer coisa que não seja uma transação individual.`;
+}
+
 function _buildExtratoPrompt(userText, bancosList) {
   const bancosJSON = JSON.stringify(
     bancosList.map(b => ({ id: b.id, nome: b.nome, tipo: b.tipo })),
     null, 2
   );
-  return `Você vai analisar um EXTRATO BANCÁRIO em PDF anexado e extrair TODAS as transações dele.
+  return `Você vai analisar um EXTRATO BANCÁRIO (PDF anexado ou texto colado) e extrair TODAS as transações dele.
 
 O usuário disse sobre esse extrato: "${userText}"
 
-BANCOS CADASTRADOS NO APP (escolha o "id" que corresponde ao banco/conta deste extrato, cruzando o nome do banco que aparece no PDF com o que o usuário disse):
+BANCOS CADASTRADOS NO APP (escolha o "id" que corresponde ao banco/conta deste extrato, cruzando o nome do banco que aparece no extrato com o que o usuário disse):
 ${bancosJSON}
 
 REGRAS:
-1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente). Extratos reais têm muitas transações — às vezes 100, 200 ou mais. Se tiver 2 linhas com mesma data e mesmo valor, são DUAS transações reais e diferentes — inclua as duas, não deduplique.
-2. Para cada transação, classifique "tipo" como "gasto" (saída/débito/compra/pagamento de fatura de cartão de crédito) ou "entrada" (crédito/recebimento/depósito/"Pix enviado devolvido" ou estorno).
-3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal) — olhe o sinal (+/-) ou a cor/coluna do extrato pra saber se é entrada ou gasto, não adivinhe pela descrição.
-4. "data" no formato YYYY-MM-DD. Se o extrato não indicar o ano, assuma ${new Date().getFullYear()}.
-5. "descricao": texto curto baseado no extrato (ex: "Pix recebido João", "Compra Supermercado X"), sem repetir o valor.
-6. Se tiver certeza de qual banco da lista acima é esse extrato, retorne o "id" dele em "banco_id". Se não tiver certeza, retorne "banco_id": null e explique em "pergunta" qual informação falta.
-7. Ignore linhas de "saldo do dia", totalizadores, cabeçalho/rodapé, ou qualquer coisa que não seja uma transação individual.
+${_extratoRegrasComuns(6)}
+7. Se tiver certeza de qual banco da lista acima é esse extrato, retorne o "id" dele em "banco_id". Se não tiver certeza, retorne "banco_id": null e explique em "pergunta" qual informação falta.
 
 Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou depois:
 <extrato_json>
@@ -8655,19 +8722,22 @@ Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou dep
 // modelo pode legitimamente passar de 2-3min, e um XHR com timeout curto cortava a
 // leitura no meio antes de terminar. Com stream não há teto artificial de tempo,
 // só um limite de segurança bem folgado via AbortController.
+// base64Pdf é opcional — null/undefined = extrato colado como texto puro no promptText
+// (mais barato que PDF: sem custo de renderizar página como documento).
 async function _callAnthropicPDF(apiKey, base64Pdf, promptText, onProgress) {
+  const content = base64Pdf
+    ? [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } },
+        { type: 'text', text: promptText }
+      ]
+    : [{ type: 'text', text: promptText }];
+
   const body = JSON.stringify({
     model: _EXTRATO_PDF_MODEL,
     max_tokens: 24000, // extrato real pode ter 200+ transações — JSON de saída fica grande
     stream: true,
     output_config: { effort: 'medium' }, // extração de tabela não precisa de "high" — corta bastante token de raciocínio
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Pdf } },
-        { type: 'text', text: promptText }
-      ]
-    }]
+    messages: [{ role: 'user', content }]
   });
 
   const controller = new AbortController();
@@ -8750,21 +8820,20 @@ function _parseExtratoResponse(raw) {
   return JSON.parse(jsonStr);
 }
 
-// Prompt pra quando o banco já é conhecido (veio do botão "Atualizar Extrato" do próprio banco no dashboard) —
-// não precisa pedir pro Claude adivinhar qual banco é.
-function _buildExtratoPromptBancoConhecido(banco) {
+// Prompt pra quando o banco já é conhecido (veio do botão "Atualizar Extrato" do próprio banco no
+// dashboard) — não precisa pedir pro Claude adivinhar qual banco é. `textoColado` é opcional: se
+// vier preenchido, o extrato foi colado como texto (não PDF) — mais barato, sem custo de documento.
+function _buildExtratoPromptBancoConhecido(banco, textoColado) {
   const isCredito = banco.tipo === 'credito';
-  return `Você vai analisar um EXTRATO BANCÁRIO em PDF anexado e extrair TODAS as transações dele.
+  const blocoTexto = textoColado
+    ? `\n--- TEXTO DO EXTRATO (colado pelo usuário, pode ter vindo de copiar/colar de app de celular) ---\n${textoColado}\n--- FIM DO TEXTO ---\n`
+    : '';
+  return `Você vai analisar ${textoColado ? 'o TEXTO de um extrato bancário colado abaixo' : 'um EXTRATO BANCÁRIO em PDF anexado'} e extrair TODAS as transações dele.
 
 Esse extrato é da conta "${banco.nome}" (${isCredito ? 'cartão de crédito — extrato/fatura' : 'conta corrente/débito'}).
-
+${blocoTexto}
 REGRAS:
-1. Leia o PDF inteiro, extraia CADA transação individual (não resuma, não pule nenhuma, não invente). Extratos reais têm muitas transações — às vezes 100, 200 ou mais. Se tiver 2 linhas com mesma data e mesmo valor (ex: dois débitos de R$ 20,00 no mesmo dia em estabelecimentos parecidos), são DUAS transações reais e diferentes — inclua as duas, não deduplique.
-2. Para cada transação, classifique "tipo" como "gasto" (compra/saída/débito${!isCredito ? '/pagamento de fatura de cartão de crédito feito por essa conta' : ''}) ou "entrada" (crédito/recebimento/depósito/"Pix enviado devolvido" ou estorno${isCredito ? '/pagamento da fatura recebido' : ''}).
-3. "valor" sempre positivo (número puro, sem "R$", ponto como separador decimal) — olhe o sinal (+/-) ou a cor/coluna do extrato pra saber se é entrada ou gasto, não adivinhe pela descrição.
-4. "data" no formato YYYY-MM-DD. Se o extrato não indicar o ano, assuma ${new Date().getFullYear()}.
-5. "descricao": texto curto baseado no extrato (nome de quem pagou/recebeu ou do estabelecimento), sem repetir o valor.
-6. Ignore linhas de "saldo do dia", totalizadores, cabeçalho/rodapé, ou qualquer coisa que não seja uma transação individual.
+${_extratoRegrasComuns(6, isCredito)}
 
 Responda APENAS com um bloco entre as tags abaixo, sem nenhum texto antes ou depois:
 <extrato_json>
