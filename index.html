@@ -6483,23 +6483,40 @@ function _escDJ(t) {
   return String(t ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function _showsDJ() { if (!Array.isArray(db.shows_dj)) db.shows_dj = []; return db.shows_dj; }
-function _showsDJPendenteTotal() {
-  return _showsDJ().filter(s => s.status !== 'recebido').reduce((a,s) => a + parseFloat(s.valor||0), 0);
+
+// Normaliza: garante s.pagamentos[] (converte o formato antigo de 1 entrada só)
+function _showDJPagamentos(s) {
+  if (!Array.isArray(s.pagamentos)) {
+    s.pagamentos = [];
+    if (s.status === 'recebido' && (s.entrada_id || s.sem_conta)) {
+      s.pagamentos.push({ id: uid(), data: s.data_recebido || today(), valor: parseFloat(s.valor_recebido ?? s.valor ?? 0),
+        forma: s.sem_conta ? 'sem_conta' : '', entrada_id: s.entrada_id || null, sem_conta: !!s.sem_conta });
+    }
+    delete s.entrada_id;
+  }
+  return s.pagamentos;
 }
+function _showDJRecebido(s) { return _showDJPagamentos(s).reduce((a,p) => a + parseFloat(p.valor||0), 0); }
+function _showDJFalta(s) { return s.status === 'recebido' ? 0 : Math.max(0, parseFloat(s.valor||0) - _showDJRecebido(s)); }
+function _showsDJPendenteTotal() { return _showsDJ().reduce((a,s) => a + _showDJFalta(s), 0); }
+
+const _FORMA_DJ_LABEL = { dinheiro:'💵 Dinheiro', pix:'📲 PIX', ted:'🏦 TED/DOC', cartao:'💳 Cartão', cheque:'📝 Cheque', sem_conta:'📝 Sem lançar na conta' };
 
 function renderShowsDJ() {
   const shows = _showsDJ();
   const hoje = today();
   const pend = shows.filter(s => s.status !== 'recebido').sort((a,b) => (a.data||'').localeCompare(b.data||''));
   const rec  = shows.filter(s => s.status === 'recebido').sort((a,b) => (b.data||'').localeCompare(a.data||''));
-  const totalPend = pend.reduce((a,s)=>a+parseFloat(s.valor||0),0);
-  const totalRec  = rec.reduce((a,s)=>a+parseFloat(s.valor_recebido ?? s.valor ?? 0),0);
+  const totalPend = pend.reduce((a,s)=>a+_showDJFalta(s),0);
+  const totalRec  = shows.reduce((a,s)=>a+_showDJRecebido(s),0);
 
   const card = s => {
     const recebido = s.status === 'recebido';
+    const pags = _showDJPagamentos(s);
+    const parcial = !recebido && pags.length > 0;
     const jaFoi = s.data && s.data < hoje;
-    const cor = recebido ? 'var(--green)' : jaFoi ? 'var(--red)' : '#e040fb';
-    const badge = recebido ? '✅ RECEBIDO' : jaFoi ? '⚠️ SHOW FEITO, A RECEBER' : '📅 AGENDADO';
+    const cor = recebido ? 'var(--green)' : parcial ? 'var(--blue)' : jaFoi ? 'var(--red)' : '#e040fb';
+    const badge = recebido ? '✅ RECEBIDO' : parcial ? '⚡ PARCIAL' : jaFoi ? '⚠️ SHOW FEITO, A RECEBER' : '📅 AGENDADO';
     const mapa = s.endereco ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.endereco)}` : '';
     return `
     <div class="client-card" style="border-left:3px solid ${cor}">
@@ -6510,17 +6527,23 @@ function renderShowsDJ() {
             <span style="font-size:0.68rem;padding:2px 10px;border-radius:20px;font-weight:700;letter-spacing:1px;color:${cor};border:1px solid ${cor}">${badge}</span>
           </div>
           <div style="font-family:var(--font-head);font-size:1.2rem;color:${recebido?'var(--text3)':cor};${recebido?'text-decoration:line-through;opacity:0.5':''}">R$ ${fmtMoney(s.valor)}</div>
+          ${parcial?`<div style="font-size:0.75rem;color:var(--blue)">⚡ Recebido R$ ${fmtMoney(_showDJRecebido(s))} — falta <strong style="color:var(--yellow)">R$ ${fmtMoney(_showDJFalta(s))}</strong></div>`:''}
           <div style="font-size:0.8rem;color:var(--text2);margin-top:2px">👤 Para: <strong>${_escDJ(s.contratante || '—')}</strong></div>
           <div style="font-size:0.78rem;color:var(--text3)">📅 ${fmtDate(s.data)}${s.hora?` às ${_escDJ(s.hora)}`:''}</div>
           ${s.endereco?`<div style="font-size:0.78rem;color:var(--text3);word-break:break-word">📍 <a href="${mapa}" target="_blank" rel="noopener" style="color:var(--text2)">${_escDJ(s.endereco)}</a></div>`:''}
           ${s.obs?`<div style="font-size:0.75rem;color:var(--text3);margin-top:2px">📝 ${_escDJ(s.obs)}</div>`:''}
-          ${recebido?`<div style="font-size:0.72rem;color:var(--green);margin-top:2px">Recebido em ${fmtDate(s.data_recebido)}${s.sem_conta?' (sem lançar na conta)':''}</div>`:''}
+          ${pags.length?`<div style="margin-top:6px;display:grid;gap:3px">
+            ${pags.map(p=>`<div style="font-size:0.74rem;color:var(--text2);padding:4px 8px;background:var(--bg3);border-radius:var(--radius2)">
+              ✅ ${fmtDate(p.data)} · ${_FORMA_DJ_LABEL[p.forma]||_escDJ(p.forma||'')} · <strong>R$ ${fmtMoney(p.valor)}</strong>${p.nome_banco?` <span style="color:var(--text3)">→ ${_escDJ(p.nome_banco)}</span>`:''}
+            </div>`).join('')}
+          </div>`:''}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">
           ${!recebido
             ? `<button class="btn btn-primary btn-sm" onclick="receberShowDJ('${s.id}')">✅ Receber</button>
                <button class="btn btn-outline btn-sm" onclick="marcarShowDJRecebidoSemConta('${s.id}')">📝 Marcar Recebido</button>`
-            : `<button class="btn btn-outline btn-sm" onclick="reabrirShowDJ('${s.id}')">↩️ Reabrir</button>`}
+            : ''}
+          ${pags.length ? `<button class="btn btn-outline btn-sm" onclick="reabrirShowDJ('${s.id}')">↩️ ${recebido?'Reabrir':'Desfazer'}</button>` : ''}
           <button class="btn-icon" onclick="openShowDJ('${s.id}')">✏️</button>
           <button class="btn-icon" onclick="deleteShowDJ('${s.id}')">🗑️</button>
         </div>
@@ -6531,7 +6554,7 @@ function renderShowsDJ() {
   document.getElementById('receberContent').innerHTML = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
       <div class="stat-card" style="padding:10px 16px;border-color:#e040fb"><div class="stat-value" style="font-size:1.1rem;color:#e040fb">R$ ${fmtMoney(totalPend)}</div><div class="stat-label">🎧 A RECEBER (${pend.length})</div></div>
-      ${totalRec>0?`<div class="stat-card" style="padding:10px 16px;opacity:0.6"><div class="stat-value" style="font-size:1.1rem">R$ ${fmtMoney(totalRec)}</div><div class="stat-label">✅ RECEBIDOS (${rec.length})</div></div>`:''}
+      ${totalRec>0?`<div class="stat-card" style="padding:10px 16px;opacity:0.6"><div class="stat-value" style="font-size:1.1rem">R$ ${fmtMoney(totalRec)}</div><div class="stat-label">✅ RECEBIDOS</div></div>`:''}
       <button class="btn btn-primary btn-sm" onclick="openShowDJ()">+ Novo Show</button>
     </div>
     ${shows.length===0
@@ -6572,89 +6595,150 @@ function saveShowDJ(id) {
   const shows = _showsDJ();
   if (id) {
     const s = shows.find(x => x.id === id);
-    if (s) Object.assign(s, { evento, contratante, endereco, data, hora, valor, obs });
+    if (s) {
+      Object.assign(s, { evento, contratante, endereco, data, hora, valor, obs });
+      if (s.status === 'recebido' && _showDJRecebido(s) < valor && !_showDJPagamentos(s).some(p => p.sem_conta)) s.status = 'pendente';
+    }
   } else {
-    shows.push({ id: uid(), evento, contratante, endereco, data, hora, valor, obs, status: 'pendente', criado_em: new Date().toISOString() });
+    shows.push({ id: uid(), evento, contratante, endereco, data, hora, valor, obs, status: 'pendente', pagamentos: [], criado_em: new Date().toISOString() });
   }
   closeModal(); saveData(); renderShowsDJ();
 }
 
-function deleteShowDJ(id) {
-  const s = _showsDJ().find(x => x.id === id);
-  if (!s) return;
-  if (!confirm(`Excluir o show "${s.evento || s.contratante}"?` + (s.entrada_id ? '\n\nA entrada lançada na conta também será desfeita.' : ''))) return;
-  _desfazerEntradaShowDJ(s);
-  db.shows_dj = _showsDJ().filter(x => x.id !== id);
-  saveData(); renderShowsDJ();
-}
-
-function receberShowDJ(id) {
-  const s = _showsDJ().find(x => x.id === id);
-  if (!s) return;
-  openModal(`✅ RECEBER SHOW — ${_escDJ(s.contratante)}`, `
-    <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px">
-      Confirme o recebimento de <strong style="color:#e040fb">R$ ${fmtMoney(s.valor)}</strong>.<br>
-      <span style="color:var(--text3);font-size:0.78rem">O valor entra nas suas Entradas de Caixa e no saldo da conta escolhida.</span>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="djrData" value="${today()}"></div>
-      <div class="form-group"><label class="form-label">Valor Recebido (R$)</label><input type="text" inputmode="decimal" class="form-control" id="djrValor" value="${fmtValorMask(s.valor)}" oninput="formatarValorInput(this)"></div>
-    </div>
-    ${_formaPagamentoHtml('djr')}
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary" onclick="confirmReceberShowDJ('${id}')">✅ Confirmar Recebimento</button>
-      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-    </div>
-  `);
-  const f = document.getElementById('djrForma'); if (f) f.value = 'pix';
-}
-
-function confirmReceberShowDJ(id) {
-  const s = _showsDJ().find(x => x.id === id);
-  if (!s) return;
-  const valor   = valorNum('djrValor');
-  const data    = document.getElementById('djrData').value;
-  const forma   = document.getElementById('djrForma')?.value || 'pix';
-  const bancoId = forma === 'dinheiro' ? '' : (document.getElementById('djrConta')?.value || '');
-  if (!valor) return alert('Informe o valor recebido.');
-  const antes = new Set(db.entradas_caixa.map(e => e.id));
-  _persistEntrada({ data, hora: new Date().toTimeString().substring(0,5), valor,
-    descricao: `Show DJ — ${s.contratante}${s.evento ? ' (' + s.evento + ')' : ''}`,
-    categoria: 'Biel do QG', forma, bancoId, obs: s.obs || '' });
-  const nova = db.entradas_caixa.find(e => !antes.has(e.id));
-  Object.assign(s, { status: 'recebido', data_recebido: data, valor_recebido: valor, entrada_id: nova ? nova.id : null, sem_conta: false });
-  closeModal(); saveData(); renderShowsDJ();
-}
-
-function marcarShowDJRecebidoSemConta(id) {
-  const s = _showsDJ().find(x => x.id === id);
-  if (!s) return;
-  if (!confirm(`Marcar o show de ${s.contratante} como recebido SEM lançar nada na conta?`)) return;
-  Object.assign(s, { status: 'recebido', data_recebido: today(), valor_recebido: parseFloat(s.valor||0), entrada_id: null, sem_conta: true });
-  saveData(); renderShowsDJ();
-}
-
-function _desfazerEntradaShowDJ(s) {
-  if (!s.entrada_id) return;
-  const e = db.entradas_caixa.find(x => x.id === s.entrada_id);
-  if (e) {
+function _desfazerPagamentosShowDJ(s) {
+  _showDJPagamentos(s).forEach(p => {
+    if (!p.entrada_id) return;
+    const e = db.entradas_caixa.find(x => x.id === p.entrada_id);
+    if (!e) return;
     if (e.banco_id) {
       const b = db.bancos_saldo.find(x => x.id === e.banco_id);
       if (b) b.saldo = parseFloat(b.saldo||0) - parseFloat(e.valor||0);
     } else {
       db.dinheiro_fisico = Math.max(0, parseFloat(db.dinheiro_fisico||0) - parseFloat(e.valor||0));
     }
-    db.entradas_caixa = db.entradas_caixa.filter(x => x.id !== s.entrada_id);
+    db.entradas_caixa = db.entradas_caixa.filter(x => x.id !== p.entrada_id);
+  });
+  s.pagamentos = [];
+}
+
+function deleteShowDJ(id) {
+  const s = _showsDJ().find(x => x.id === id);
+  if (!s) return;
+  const temEntrada = _showDJPagamentos(s).some(p => p.entrada_id);
+  if (!confirm(`Excluir o show "${s.evento || s.contratante}"?` + (temEntrada ? '\n\nAs entradas lançadas nas contas também serão desfeitas.' : ''))) return;
+  _desfazerPagamentosShowDJ(s);
+  db.shows_dj = _showsDJ().filter(x => x.id !== id);
+  saveData(); renderShowsDJ();
+}
+
+// ── Receber (pode dividir em várias formas: ex. parte dinheiro + parte PIX) ──
+function _linhaPagDJ(idx, valor, forma) {
+  const contas = db.bancos_saldo.filter(b => b.tipo !== 'credito');
+  return `
+  <div class="djPagLinha" data-idx="${idx}" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+    <div class="form-group" style="margin:0"><label class="form-label">Valor (R$)</label>
+      <input type="text" inputmode="decimal" class="form-control djPagValor" value="${valor?fmtValorMask(valor):''}" placeholder="0,00" oninput="formatarValorInput(this);_somaPagDJ()"></div>
+    <div class="form-group" style="margin:0"><label class="form-label">Forma</label>
+      <select class="form-control djPagForma" onchange="_toggleContaDJ(this)">
+        ${['pix','dinheiro','ted','cartao','cheque'].map(f=>`<option value="${f}" ${f===forma?'selected':''}>${_FORMA_DJ_LABEL[f]}</option>`).join('')}
+      </select></div>
+    <div class="form-group djPagContaWrap" style="margin:0;${forma==='dinheiro'?'visibility:hidden':''}"><label class="form-label">Conta</label>
+      <select class="form-control djPagConta">
+        ${contas.map(b=>`<option value="${b.id}">${_escDJ(b.nome)}</option>`).join('')}
+        <option value="">💵 Dinheiro em mão</option>
+      </select></div>
+    <button class="btn-icon" title="Remover" onclick="this.closest('.djPagLinha').remove();_somaPagDJ()">✖</button>
+  </div>`;
+}
+function _toggleContaDJ(sel) {
+  const w = sel.closest('.djPagLinha').querySelector('.djPagContaWrap');
+  if (w) w.style.visibility = sel.value === 'dinheiro' ? 'hidden' : '';
+}
+function _addLinhaPagDJ() {
+  const box = document.getElementById('djPagLinhas');
+  const falta = Math.max(0, (parseFloat(box.dataset.falta)||0) - _somaPagDJ(true));
+  box.insertAdjacentHTML('beforeend', _linhaPagDJ(Date.now(), falta, 'dinheiro'));
+  _somaPagDJ();
+}
+function _somaPagDJ(silencioso) {
+  const box = document.getElementById('djPagLinhas');
+  if (!box) return 0;
+  const total = [...box.querySelectorAll('.djPagValor')].reduce((a,el)=>a+valorNum(el),0);
+  if (!silencioso) {
+    const falta = parseFloat(box.dataset.falta)||0;
+    const resto = falta - total;
+    const el = document.getElementById('djPagResumo');
+    if (el) el.innerHTML = `Total informado: <strong>R$ ${fmtMoney(total)}</strong> de R$ ${fmtMoney(falta)}` +
+      (resto > 0.004 ? ` — <span style="color:var(--yellow)">vai ficar faltando R$ ${fmtMoney(resto)} (parcial)</span>`
+       : resto < -0.004 ? ` — <span style="color:var(--blue)">R$ ${fmtMoney(-resto)} a mais</span>`
+       : ` — <span style="color:var(--green)">fecha o valor ✅</span>`);
   }
-  s.entrada_id = null;
+  return total;
+}
+
+function receberShowDJ(id) {
+  const s = _showsDJ().find(x => x.id === id);
+  if (!s) return;
+  const falta = _showDJFalta(s);
+  openModal(`✅ RECEBER SHOW — ${_escDJ(s.contratante)}`, `
+    <div style="font-size:0.85rem;color:var(--text2);margin-bottom:14px">
+      ${_showDJRecebido(s)>0?`Já recebido R$ ${fmtMoney(_showDJRecebido(s))}. `:''}Falta receber <strong style="color:#e040fb">R$ ${fmtMoney(falta)}</strong>.<br>
+      <span style="color:var(--text3);font-size:0.78rem">Pagou parte em dinheiro e parte no PIX? Clique em "+ Outra forma" e divida o valor. Cada parte entra na conta certa.</span>
+    </div>
+    <div class="form-group"><label class="form-label">Data do Recebimento</label><input type="date" class="form-control" id="djrData" value="${today()}"></div>
+    <div id="djPagLinhas" data-falta="${falta}">${_linhaPagDJ(0, falta, 'pix')}</div>
+    <button class="btn btn-outline btn-sm" onclick="_addLinhaPagDJ()">+ Outra forma de pagamento</button>
+    <div id="djPagResumo" style="font-size:0.8rem;color:var(--text2);margin-top:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" onclick="confirmReceberShowDJ('${id}')">✅ Confirmar Recebimento</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+    </div>
+  `);
+  _somaPagDJ();
+}
+
+function confirmReceberShowDJ(id) {
+  const s = _showsDJ().find(x => x.id === id);
+  if (!s) return;
+  const data = document.getElementById('djrData').value || today();
+  const linhas = [...document.querySelectorAll('#djPagLinhas .djPagLinha')].map(l => {
+    const forma = l.querySelector('.djPagForma').value;
+    return { valor: valorNum(l.querySelector('.djPagValor')), forma, bancoId: forma === 'dinheiro' ? '' : l.querySelector('.djPagConta').value };
+  }).filter(l => l.valor > 0);
+  if (!linhas.length) return alert('Informe pelo menos um valor recebido.');
+  const pags = _showDJPagamentos(s);
+  const hora = new Date().toTimeString().substring(0,5);
+  const divido = linhas.length > 1;
+  linhas.forEach(l => {
+    const antes = new Set(db.entradas_caixa.map(e => e.id));
+    _persistEntrada({ data, hora, valor: l.valor,
+      descricao: `Show DJ — ${s.contratante}${s.evento ? ' (' + s.evento + ')' : ''}${divido ? ' · ' + (_FORMA_DJ_LABEL[l.forma]||l.forma).replace(/^\S+\s/,'') : ''}`,
+      categoria: 'Biel do QG', forma: l.forma, bancoId: l.bancoId, obs: s.obs || '' });
+    const nova = db.entradas_caixa.find(e => !antes.has(e.id));
+    pags.push({ id: uid(), data, valor: l.valor, forma: l.forma, entrada_id: nova ? nova.id : null, nome_banco: nova ? nova.nome_banco : '' });
+  });
+  if (_showDJRecebido(s) + 0.004 >= parseFloat(s.valor||0)) { s.status = 'recebido'; s.data_recebido = data; }
+  else s.status = 'pendente';
+  closeModal(); saveData(); renderShowsDJ();
+}
+
+function marcarShowDJRecebidoSemConta(id) {
+  const s = _showsDJ().find(x => x.id === id);
+  if (!s) return;
+  const falta = _showDJFalta(s);
+  if (!confirm(`Marcar o show de ${s.contratante} como recebido (R$ ${fmtMoney(falta)}) SEM lançar nada na conta?`)) return;
+  _showDJPagamentos(s).push({ id: uid(), data: today(), valor: falta, forma: 'sem_conta', entrada_id: null, sem_conta: true });
+  s.status = 'recebido'; s.data_recebido = today();
+  saveData(); renderShowsDJ();
 }
 
 function reabrirShowDJ(id) {
   const s = _showsDJ().find(x => x.id === id);
   if (!s) return;
-  if (!confirm('Reabrir este show como pendente?' + (s.entrada_id ? '\n\nA entrada lançada na conta será desfeita e o saldo volta.' : ''))) return;
-  _desfazerEntradaShowDJ(s);
-  Object.assign(s, { status: 'pendente', data_recebido: null, valor_recebido: null, sem_conta: false });
+  const temEntrada = _showDJPagamentos(s).some(p => p.entrada_id);
+  if (!confirm('Desfazer os recebimentos deste show e deixar pendente?' + (temEntrada ? '\n\nAs entradas lançadas nas contas serão desfeitas e os saldos voltam.' : ''))) return;
+  _desfazerPagamentosShowDJ(s);
+  s.status = 'pendente'; s.data_recebido = null;
   saveData(); renderShowsDJ();
 }
 
